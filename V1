@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arithmetic Game</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #f5f5f0; color: #111; font-family: 'Roboto Mono', monospace;
+  min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 0 0 60px;
+}
+
+/* NAV */
+.nav {
+  width: 100%; max-width: 520px; display: flex; border-bottom: 1px solid #ddd;
+  margin-bottom: 36px; background: #f5f5f0; position: sticky; top: 0; z-index: 10;
+}
+.nav-btn {
+  flex: 1; padding: 16px 4px; background: none; border: none;
+  font-family: 'Roboto Mono', monospace; font-size: 0.55rem; letter-spacing: 1.5px;
+  text-transform: uppercase; color: #aaa; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+.nav-btn.active { color: #111; border-bottom-color: #111; }
+
+/* PAGES */
+.page { display: none; flex-direction: column; align-items: center; width: 100%; max-width: 520px; padding: 0 20px; }
+.page.active { display: flex; }
+.section-label { font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; color: #999; margin-bottom: 8px; width: 100%; }
+
+/* CONFIG */
+.ops-list { display: flex; flex-direction: column; gap: 2px; margin-bottom: 24px; width: 100%; }
+.op-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: white; border: 1px solid #ddd; cursor: pointer; user-select: none; }
+.op-row.active { border-color: #111; }
+.op-check { width: 13px; height: 13px; border: 1px solid #ccc; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; }
+.op-row.active .op-check { background: #111; border-color: #111; color: white; }
+.op-label { font-size: 0.75rem; font-weight: 700; min-width: 110px; }
+.range-inline { font-size: 0.62rem; color: #999; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.range-inline input {
+  width: 36px; border: none; border-bottom: 1px solid #ccc; background: transparent;
+  font-family: 'Roboto Mono', monospace; font-size: 0.62rem; text-align: center;
+  color: #111; padding: 1px 0; outline: none;
+}
+.range-inline input:focus { border-bottom-color: #111; }
+.duration-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 24px; width: 100%; }
+.dur-btn {
+  padding: 7px 14px; background: white; border: 1px solid #ddd;
+  font-family: 'Roboto Mono', monospace; font-size: 0.7rem; cursor: pointer; color: #999;
+}
+.dur-btn.active { border-color: #111; color: #111; font-weight: 700; }
+.start-btn {
+  width: 100%; padding: 13px; background: #111; color: white; border: none;
+  font-family: 'Roboto Mono', monospace; font-size: 0.8rem; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase; cursor: pointer;
+}
+.start-btn:hover { background: #333; }
+
+/* pace toggle in config */
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; background: white; border: 1px solid #ddd; margin-bottom: 24px; width: 100%; cursor: pointer;
+}
+.toggle-row-label { font-size: 0.75rem; font-weight: 700; }
+.toggle-row-sub { font-size: 0.6rem; color: #999; margin-top: 2px; }
+.toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+.toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider { position: absolute; inset: 0; background: #ddd; border-radius: 20px; transition: background 0.2s; }
+.toggle-slider::before { content: ''; position: absolute; width: 14px; height: 14px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: transform 0.2s; }
+.toggle-switch input:checked + .toggle-slider { background: #111; }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+
+/* GAME */
+.timer-bar-wrap { width: 100%; height: 3px; background: #ddd; margin-bottom: 32px; }
+.timer-bar { height: 100%; background: #111; transition: width 1s linear; }
+.hud { display: flex; justify-content: space-between; width: 100%; margin-bottom: 48px; font-size: 0.6rem; letter-spacing: 1px; color: #999; text-transform: uppercase; }
+.hud-val { font-size: 1.1rem; color: #111; font-weight: 700; margin-top: 4px; }
+.question { font-size: 3.2rem; font-weight: 700; letter-spacing: -1px; margin-bottom: 20px; text-align: center; white-space: nowrap; line-height: 1; }
+.answer-input {
+  background: transparent; border: none; border-bottom: 2px solid #111;
+  font-family: 'Roboto Mono', monospace; font-size: 2.8rem; font-weight: 700;
+  text-align: center; width: 200px; outline: none; color: #111; padding: 4px 0; caret-color: #111;
+}
+.stop-btn {
+  margin-top: 32px; background: none; border: none; font-family: 'Roboto Mono', monospace;
+  font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase;
+  color: #ccc; cursor: pointer; padding: 4px 0;
+}
+.stop-btn:hover { color: #999; }
+
+/* PACE BAR */
+.pace-wrap { width: 100%; margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 44px; }
+.pace-wrap.hidden { display: none; }
+.pace-label { font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; color: #bbb; }
+.pace-bar-wrap { width: 100%; position: relative; height: 6px; background: #e8e8e3; }
+.pace-bar-wrap::after { content: ''; position: absolute; left: 50%; top: -3px; width: 1px; height: 12px; background: #ccc; }
+.pace-fill { position: absolute; top: 0; height: 100%; transition: width 0.15s ease-out, background 0.3s ease; }
+.pace-fill.behind { left: 50%; background: #e05a3a; }
+.pace-fill.ahead { right: 50%; background: #3a9e6f; }
+.pace-number { font-size: 0.68rem; font-weight: 700; letter-spacing: 1px; color: #999; min-height: 1em; transition: color 0.3s ease; }
+.pace-number.behind { color: #e05a3a; }
+.pace-number.ahead { color: #3a9e6f; }
+.pace-number.no-avg { color: #bbb; font-weight: 400; }
+
+/* RESULTS */
+.result-label { font-size: 0.6rem; letter-spacing: 3px; text-transform: uppercase; color: #999; margin-bottom: 6px; }
+.result-score { font-size: clamp(4rem,16vw,7rem); font-weight: 700; line-height: 1; letter-spacing: -4px; margin-bottom: 4px; }
+.result-sub { font-size: 0.7rem; color: #999; margin-bottom: 24px; }
+.stats { display: flex; gap: 2px; width: 100%; margin-bottom: 24px; }
+.stat { flex: 1; background: white; border: 1px solid #ddd; padding: 14px 8px; text-align: center; }
+.stat-val { font-size: 1.3rem; font-weight: 700; }
+.stat-key { font-size: 0.55rem; letter-spacing: 1px; text-transform: uppercase; color: #999; margin-top: 4px; }
+.chart-wrap { width: 100%; background: white; border: 1px solid #ddd; padding: 18px 18px 14px; margin-bottom: 14px; text-align: left; }
+.chart-title { font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; color: #999; margin-bottom: 16px; }
+.chart-rows { display: flex; flex-direction: column; gap: 12px; }
+.chart-row { display: flex; align-items: center; gap: 10px; }
+.chart-op-label { font-size: 1rem; font-weight: 700; width: 26px; text-align: center; flex-shrink: 0; }
+.bar-track { flex: 1; height: 18px; background: #f0f0eb; position: relative; overflow: hidden; }
+.bar-fill { height: 100%; background: #111; width: 0%; transition: width 0.7s cubic-bezier(0.16,1,0.3,1); }
+.bar-fill.slowest { background: #bbb; }
+.chart-time-label { font-size: 0.62rem; font-weight: 700; width: 46px; text-align: right; flex-shrink: 0; color: #555; }
+.chart-count { font-size: 0.56rem; color: #bbb; width: 34px; text-align: right; flex-shrink: 0; }
+.chart-no-data { font-size: 0.62rem; color: #bbb; text-align: center; padding: 10px 0; }
+.btn-row { display: flex; gap: 8px; width: 100%; }
+.btn-outline {
+  flex: 1; padding: 12px 8px; background: transparent; border: 1px solid #111;
+  font-family: 'Roboto Mono', monospace; font-size: 0.65rem; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; cursor: pointer; line-height: 1.3;
+}
+.btn-outline:hover { background: #111; color: white; }
+.btn-outline:disabled { opacity: 0.25; cursor: not-allowed; border-color: #999; color: #999; }
+.btn-outline:disabled:hover { background: transparent; color: #999; }
+
+/* HISTORY */
+.history-controls { display: flex; gap: 4px; margin-bottom: 20px; width: 100%; }
+.hist-btn { padding: 6px 12px; background: white; border: 1px solid #ddd; font-family: 'Roboto Mono', monospace; font-size: 0.62rem; cursor: pointer; color: #999; }
+.hist-btn.active { border-color: #111; color: #111; font-weight: 700; }
+.graph-wrap { width: 100%; background: white; border: 1px solid #ddd; padding: 16px; margin-bottom: 16px; }
+.graph-title { font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; color: #999; margin-bottom: 12px; }
+canvas { width: 100%; display: block; }
+.history-table { width: 100%; border-collapse: collapse; font-size: 0.62rem; margin-bottom: 20px; }
+.history-table th { text-align: left; font-size: 0.55rem; letter-spacing: 1px; text-transform: uppercase; color: #999; padding: 6px 8px; border-bottom: 1px solid #ddd; }
+.history-table td { padding: 8px 8px; border-bottom: 1px solid #f0f0eb; }
+.history-table tr:last-child td { border-bottom: none; }
+.no-history { font-size: 0.65rem; color: #bbb; text-align: center; padding: 32px 0; width: 100%; }
+
+/* PATTERNS */
+.pattern-card { width: 100%; background: white; border: 1px solid #ddd; padding: 16px; margin-bottom: 8px; }
+.pattern-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; gap: 8px; }
+.pattern-card-title { font-size: 0.75rem; font-weight: 700; }
+.pattern-card-count { font-size: 0.6rem; color: #999; flex-shrink: 0; }
+.pattern-bar-wrap { height: 4px; background: #f0f0eb; margin-bottom: 10px; }
+.pattern-bar-fill { height: 100%; background: #e05a3a; }
+.pattern-card-detail { font-size: 0.6rem; color: #888; line-height: 1.7; }
+.pattern-examples { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 4px; }
+.pattern-ex-chip { font-size: 0.58rem; padding: 3px 7px; background: #f5f5f0; border: 1px solid #e0e0da; color: #555; }
+.pattern-template { margin-top: 8px; font-size: 0.68rem; font-weight: 700; color: #111; letter-spacing: -0.5px; }
+.pattern-practice-btn {
+  margin-top: 12px; padding: 7px 14px; background: transparent; border: 1px solid #111;
+  font-family: 'Roboto Mono', monospace; font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase; cursor: pointer; width: 100%;
+}
+.pattern-practice-btn:hover { background: #111; color: white; }
+.no-patterns { font-size: 0.65rem; color: #bbb; text-align: center; padding: 32px 0; width: 100%; }
+
+/* PRACTICE */
+.practice-meta { display: flex; justify-content: space-between; width: 100%; margin-bottom: 48px; font-size: 0.6rem; letter-spacing: 1px; color: #999; text-transform: uppercase; }
+.practice-meta-val { font-size: 1rem; color: #111; font-weight: 700; margin-top: 4px; }
+.practice-tag { display: inline-block; font-size: 0.55rem; letter-spacing: 2px; text-transform: uppercase; padding: 3px 8px; border: 1px solid #ddd; color: #aaa; margin-bottom: 16px; margin-right: 4px; }
+.practice-tag.tag-exact { border-color: #111; color: #111; }
+.practice-tag.tag-similar { border-color: #888; color: #666; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <button class="nav-btn active" data-page="play">Play</button>
+  <button class="nav-btn" data-page="results">Results</button>
+  <button class="nav-btn" data-page="history">History</button>
+  <button class="nav-btn" data-page="patterns">Patterns</button>
+  <button class="nav-btn" data-page="practice">Practice</button>
+</nav>
+
+<!-- PLAY -->
+<div class="page active" id="page-play">
+  <div id="config-screen" style="width:100%">
+    <div class="section-label">Operations</div>
+    <div class="ops-list">
+      <div class="op-row active" data-op="addition" onclick="toggleOp(event,this)">
+        <div class="op-check">&#10003;</div><div class="op-label">Addition</div>
+        <div class="range-inline">
+          (<input type="number" id="add-a1" value="2" onclick="stopProp(event)"> to
+          <input type="number" id="add-a2" value="100" onclick="stopProp(event)">)
+          + (<input type="number" id="add-b1" value="2" onclick="stopProp(event)"> to
+          <input type="number" id="add-b2" value="100" onclick="stopProp(event)">)
+        </div>
+      </div>
+      <div class="op-row active" data-op="subtraction" onclick="toggleOp(event,this)">
+        <div class="op-check">&#10003;</div><div class="op-label">Subtraction</div>
+        <div class="range-inline" style="color:#ccc">Addition in reverse.</div>
+      </div>
+      <div class="op-row active" data-op="multiplication" onclick="toggleOp(event,this)">
+        <div class="op-check">&#10003;</div><div class="op-label">Multiplication</div>
+        <div class="range-inline">
+          (<input type="number" id="mul-a1" value="2" onclick="stopProp(event)"> to
+          <input type="number" id="mul-a2" value="12" onclick="stopProp(event)">)
+          x (<input type="number" id="mul-b1" value="2" onclick="stopProp(event)"> to
+          <input type="number" id="mul-b2" value="100" onclick="stopProp(event)">)
+        </div>
+      </div>
+      <div class="op-row active" data-op="division" onclick="toggleOp(event,this)">
+        <div class="op-check">&#10003;</div><div class="op-label">Division</div>
+        <div class="range-inline" style="color:#ccc">Multiplication in reverse.</div>
+      </div>
+    </div>
+    <div class="section-label">Duration</div>
+    <div class="duration-row">
+      <button class="dur-btn" data-sec="30">30s</button>
+      <button class="dur-btn" data-sec="60">1 min</button>
+      <button class="dur-btn active" data-sec="120">2 min</button>
+      <button class="dur-btn" data-sec="300">5 min</button>
+      <button class="dur-btn" data-sec="600">10 min</button>
+    </div>
+    <div class="section-label">Options</div>
+    <label class="toggle-row" for="pace-toggle">
+      <div>
+        <div class="toggle-row-label">Pace indicator</div>
+        <div class="toggle-row-sub">Live bar showing your speed vs average</div>
+      </div>
+      <div class="toggle-switch">
+        <input type="checkbox" id="pace-toggle" checked onchange="setPaceVisible(this.checked)">
+        <div class="toggle-slider"></div>
+      </div>
+    </label>
+    <button class="start-btn" onclick="startGame()">Start</button>
+  </div>
+
+  <div id="game-screen" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;">
+    <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar"></div></div>
+    <div class="hud">
+      <div><div>Time</div><div class="hud-val" id="timer-display">2:00</div></div>
+      <div style="text-align:right"><div>Score</div><div class="hud-val" id="score-display">0</div></div>
+    </div>
+    <div class="question" id="question-display"></div>
+    <input class="answer-input" id="answer-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
+    <div class="pace-wrap" id="pace-wrap">
+      <div class="pace-label" id="pace-label">vs your avg</div>
+      <div class="pace-bar-wrap"><div class="pace-fill" id="pace-fill"></div></div>
+      <div class="pace-number" id="pace-number"></div>
+    </div>
+    <button class="stop-btn" onclick="quitGame()">Stop</button>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div class="page" id="page-results">
+  <div class="result-label">Final Score</div>
+  <div class="result-score" id="final-score">0</div>
+  <div class="result-sub" id="final-sub"></div>
+  <div class="stats">
+    <div class="stat"><div class="stat-val" id="stat-correct">0</div><div class="stat-key">Correct</div></div>
+    <div class="stat"><div class="stat-val" id="stat-trouble">0</div><div class="stat-key">Trouble</div></div>
+    <div class="stat"><div class="stat-val" id="stat-acc">-</div><div class="stat-key">Accuracy</div></div>
+  </div>
+  <div class="chart-wrap">
+    <div class="chart-title">Avg. time per correct answer</div>
+    <div class="chart-rows" id="chart-rows"></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn-outline" id="practice-last-btn" onclick="startPracticeFromResults()" disabled>Practice trouble</button>
+    <button class="btn-outline" onclick="showPage('play')">Play again</button>
+  </div>
+</div>
+
+<!-- HISTORY -->
+<div class="page" id="page-history">
+  <div class="history-controls">
+    <button class="hist-btn active" onclick="setHistN(this,5)">Last 5</button>
+    <button class="hist-btn" onclick="setHistN(this,10)">10</button>
+    <button class="hist-btn" onclick="setHistN(this,100)">100</button>
+    <button class="hist-btn" onclick="setHistN(this,99999)">All time</button>
+  </div>
+  <div class="graph-wrap"><div class="graph-title">Score over time</div><canvas id="graph-score" height="120"></canvas></div>
+  <div class="graph-wrap"><div class="graph-title">Accuracy % over time</div><canvas id="graph-acc" height="120"></canvas></div>
+  <div class="graph-wrap"><div class="graph-title">Avg time per answer (s)</div><canvas id="graph-time" height="120"></canvas></div>
+  <div class="section-label" style="margin-top:8px">Game log</div>
+  <table class="history-table">
+    <thead><tr><th>#</th><th>Date</th><th>Dur</th><th>Score</th><th>Acc</th><th>Avg time</th></tr></thead>
+    <tbody id="history-tbody"></tbody>
+  </table>
+  <p class="no-history" id="no-history" style="display:none">No games played yet.</p>
+  <button class="btn-outline" style="width:100%;margin-top:4px" onclick="clearHistory()">Clear all history</button>
+</div>
+
+<!-- PATTERNS -->
+<div class="page" id="page-patterns">
+  <div id="patterns-list" style="width:100%"></div>
+  <p class="no-patterns" id="no-patterns" style="display:none">Play more games to see patterns.</p>
+</div>
+
+<!-- PRACTICE -->
+<div class="page" id="page-practice">
+  <div id="practice-config" style="width:100%">
+    <div class="section-label">Select patterns to drill</div>
+    <div id="pattern-pick-list" style="display:flex;flex-direction:column;gap:2px;margin-bottom:20px;width:100%"></div>
+    <button class="start-btn" id="practice-start-btn" onclick="startPracticeSession()">Start practice</button>
+  </div>
+  <div id="practice-game" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;">
+    <div class="practice-meta">
+      <div><div>Question</div><div class="practice-meta-val" id="prac-progress">1/5</div></div>
+      <div style="text-align:right"><div>Remaining</div><div class="practice-meta-val" id="prac-remaining">5</div></div>
+    </div>
+    <div id="practice-tag-wrap" style="margin-bottom:12px"></div>
+    <div class="question" id="practice-question"></div>
+    <input class="answer-input" id="practice-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
+    <div style="margin-top:28px;text-align:center">
+      <button class="btn-outline" style="width:auto;padding:8px 20px" onclick="endPracticeSession()">End practice</button>
+    </div>
+  </div>
+  <div id="practice-done" style="display:none;width:100%;text-align:center;padding:40px 0">
+    <div style="font-size:0.6rem;letter-spacing:3px;text-transform:uppercase;color:#999;margin-bottom:12px">Practice complete</div>
+    <div style="font-size:3rem;font-weight:700;margin-bottom:24px" id="prac-done-score">0/0</div>
+    <button class="btn-outline" style="width:100%;margin-bottom:8px" onclick="startPracticeSession()">Go again</button>
+    <button class="btn-outline" style="width:100%" onclick="showPracticeConfig()">Change selection</button>
+  </div>
+</div>
+
+<script>
+(function() {
+// ================================================================
+// STORAGE
+// ================================================================
+function loadData() {
+  try { return JSON.parse(localStorage.getItem('arith_v3') || 'null') || { games: [], trouble: {} }; }
+  catch(e) { return { games: [], trouble: {} }; }
+}
+function saveData(d) {
+  try { localStorage.setItem('arith_v3', JSON.stringify(d)); } catch(e) {}
+}
+
+// ================================================================
+// NAV
+// ================================================================
+document.querySelectorAll('.nav-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() { showPage(btn.dataset.page); });
+});
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelector('.nav-btn[data-page="' + name + '"]').classList.add('active');
+  if (name === 'history') renderHistory();
+  if (name === 'patterns') renderPatterns();
+  if (name === 'practice') renderPracticeConfig();
+}
+
+// ================================================================
+// GAME STATE
+// ================================================================
+var selectedOps = new Set(['addition','subtraction','multiplication','division']);
+var duration = 120;
+var score = 0, troubleCount = 0;
+var currentAnswer = null, currentOp = null, currentQuestion = null;
+var currentQA = null, currentQB = null;
+var questionStartTime = null;
+var timerInterval = null;
+var timeLeft = 0, accepting = false, currentQuestionHadTrouble = false;
+var answeredQuestions = [];
+
+var opData = {
+  addition:       { total: 0, count: 0 },
+  subtraction:    { total: 0, count: 0 },
+  multiplication: { total: 0, count: 0 },
+  division:       { total: 0, count: 0 }
+};
+var opSymbols = { addition: '+', subtraction: '-', multiplication: 'x', division: '/' };
+
+// ================================================================
+// HELPERS
+// ================================================================
+function stopProp(e) { e.stopPropagation(); }
+function randInt(a, b) {
+  a = parseInt(a); b = parseInt(b);
+  if (a > b) { var t = a; a = b; b = t; }
+  return Math.floor(Math.random() * (b - a + 1)) + a;
+}
+function formatTime(s) { return Math.floor(s/60) + ':' + ('0' + (s%60)).slice(-2); }
+function fmtDate(ts) {
+  var d = new Date(ts);
+  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+}
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+function opName(op) { return op.charAt(0).toUpperCase() + op.slice(1); }
+
+// ================================================================
+// CONFIG
+// ================================================================
+document.querySelectorAll('.dur-btn').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.dur-btn').forEach(function(b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    duration = parseInt(btn.dataset.sec);
+  });
+});
+
+function toggleOp(e, el) {
+  if (e.target.tagName === 'INPUT') return;
+  var op = el.dataset.op;
+  if (selectedOps.has(op)) {
+    if (selectedOps.size === 1) return;
+    selectedOps.delete(op);
+    el.classList.remove('active');
+  } else {
+    selectedOps.add(op);
+    el.classList.add('active');
+  }
+}
+
+// ================================================================
+// QUESTION GENERATION
+// ================================================================
+function generateQuestion(opOverride, aOverride, bOverride) {
+  var ops = opOverride ? [opOverride] : Array.from(selectedOps);
+  var op = ops[Math.floor(Math.random() * ops.length)];
+  var a, b, question, answer;
+
+  if (op === 'addition') {
+    a = aOverride !== undefined ? aOverride : randInt(document.getElementById('add-a1').value, document.getElementById('add-a2').value);
+    b = bOverride !== undefined ? bOverride : randInt(document.getElementById('add-b1').value, document.getElementById('add-b2').value);
+    question = a + ' + ' + b + ' ='; answer = a + b;
+  } else if (op === 'subtraction') {
+    a = aOverride !== undefined ? aOverride : randInt(document.getElementById('add-a1').value, document.getElementById('add-a2').value);
+    b = bOverride !== undefined ? bOverride : randInt(document.getElementById('add-b1').value, document.getElementById('add-b2').value);
+    var big = Math.max(a,b), small = Math.min(a,b);
+    question = big + ' - ' + small + ' ='; answer = big - small; a = big; b = small;
+  } else if (op === 'multiplication') {
+    a = aOverride !== undefined ? aOverride : randInt(document.getElementById('mul-a1').value, document.getElementById('mul-a2').value);
+    b = bOverride !== undefined ? bOverride : randInt(document.getElementById('mul-b1').value, document.getElementById('mul-b2').value);
+    question = a + ' x ' + b + ' ='; answer = a * b;
+  } else {
+    a = aOverride !== undefined ? aOverride : randInt(document.getElementById('mul-a1').value, document.getElementById('mul-a2').value);
+    b = bOverride !== undefined ? bOverride : randInt(document.getElementById('mul-b1').value, document.getElementById('mul-b2').value);
+    question = (a * b) + ' / ' + a + ' ='; answer = b;
+  }
+  return { question: question, answer: answer, op: op, a: a, b: b };
+}
+
+// ================================================================
+// PACE BAR
+// ================================================================
+var paceVisible = true;
+var paceRafId = null;
+var _smoothedPct = 0, _smoothedDiff = 0, _lastDir = null;
+
+function setPaceVisible(on) {
+  paceVisible = on;
+  document.getElementById('pace-wrap').classList.toggle('hidden', !on);
+  try { localStorage.setItem('arith_pace', on ? '1' : '0'); } catch(e) {}
+}
+
+function loadPacePreference() {
+  try {
+    var v = localStorage.getItem('arith_pace');
+    if (v === '0') {
+      paceVisible = false;
+      document.getElementById('pace-toggle').checked = false;
+      document.getElementById('pace-wrap').classList.add('hidden');
+    }
+  } catch(e) {}
+}
+
+function updatePace() {
+  if (!paceVisible || !accepting) return;
+  var fill = document.getElementById('pace-fill');
+  var num  = document.getElementById('pace-number');
+  var lbl  = document.getElementById('pace-label');
+  var avg  = opData[currentOp].count > 0 ? opData[currentOp].total / opData[currentOp].count : null;
+  var elapsed = performance.now() - questionStartTime;
+
+  if (!avg) {
+    if (_lastDir !== 'noavg') {
+      fill.style.width = '0%'; fill.className = 'pace-fill';
+      num.className = 'pace-number no-avg'; lbl.textContent = 'no avg yet';
+      _lastDir = 'noavg';
+    }
+    num.textContent = (elapsed / 1000).toFixed(1) + 's';
+    paceRafId = requestAnimationFrame(updatePace);
+    return;
+  }
+
+  lbl.textContent = 'vs avg (' + (avg / 1000).toFixed(1) + 's)';
+  var diff = elapsed - avg;
+  var targetPct = Math.min(Math.abs(diff) / avg, 1) * 50;
+  _smoothedPct += (targetPct - _smoothedPct) * 0.18;
+  _smoothedDiff += (diff - _smoothedDiff) * 0.18;
+
+  var dir = diff > 0 ? 'behind' : 'ahead';
+  if (dir !== _lastDir) {
+    _smoothedPct = targetPct; _smoothedDiff = diff; _lastDir = dir;
+  }
+
+  var pct = _smoothedPct.toFixed(2) + '%';
+  var diffSec = (_smoothedDiff / 1000).toFixed(1);
+
+  if (dir === 'behind') {
+    fill.className = 'pace-fill behind'; fill.style.left = '50%'; fill.style.right = ''; fill.style.width = pct;
+    num.textContent = '+' + diffSec + 's'; num.className = 'pace-number behind';
+  } else {
+    fill.className = 'pace-fill ahead'; fill.style.right = '50%'; fill.style.left = ''; fill.style.width = pct;
+    num.textContent = diffSec + 's'; num.className = 'pace-number ahead';
+  }
+  paceRafId = requestAnimationFrame(updatePace);
+}
+
+function startPaceTicker() {
+  if (paceRafId) { cancelAnimationFrame(paceRafId); paceRafId = null; }
+  _smoothedPct = 0; _smoothedDiff = 0; _lastDir = null;
+  document.getElementById('pace-fill').style.width = '0%';
+  document.getElementById('pace-fill').className = 'pace-fill';
+  document.getElementById('pace-number').textContent = '';
+  document.getElementById('pace-label').textContent = 'vs your avg';
+  if (paceVisible) paceRafId = requestAnimationFrame(updatePace);
+}
+
+function stopPaceTicker() {
+  if (paceRafId) { cancelAnimationFrame(paceRafId); paceRafId = null; }
+}
+
+// ================================================================
+// MAIN GAME
+// ================================================================
+function startGame() {
+  score = 0; troubleCount = 0; answeredQuestions = [];
+  timeLeft = duration;
+  for (var k in opData) { opData[k].total = 0; opData[k].count = 0; }
+
+  document.getElementById('config-screen').style.display = 'none';
+  document.getElementById('game-screen').style.display = 'flex';
+  document.getElementById('score-display').textContent = '0';
+  document.getElementById('timer-display').textContent = formatTime(timeLeft);
+
+  var bar = document.getElementById('timer-bar');
+  bar.style.transition = 'none'; bar.style.width = '100%';
+  bar.offsetHeight;
+  bar.style.transition = 'width 1s linear';
+
+  nextQuestion();
+
+  timerInterval = setInterval(function() {
+    timeLeft--;
+    document.getElementById('timer-display').textContent = formatTime(timeLeft);
+    document.getElementById('timer-bar').style.width = (timeLeft / duration * 100) + '%';
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function nextQuestion() {
+  var q = generateQuestion();
+  currentAnswer = q.answer; currentOp = q.op;
+  currentQuestion = q.question; currentQA = q.a; currentQB = q.b;
+  currentQuestionHadTrouble = false;
+  questionStartTime = performance.now();
+  document.getElementById('question-display').textContent = q.question;
+  var inp = document.getElementById('answer-input');
+  inp.value = ''; accepting = true; inp.focus();
+  startPaceTicker();
+}
+
+function quitGame() {
+  clearInterval(timerInterval); stopPaceTicker(); accepting = false;
+  document.getElementById('game-screen').style.display = 'none';
+  document.getElementById('config-screen').style.display = 'block';
+  showPage('play');
+}
+
+document.getElementById('answer-input').addEventListener('keydown', function(e) {
+  if (!accepting) return;
+  if (e.key === 'Backspace' && !currentQuestionHadTrouble) {
+    currentQuestionHadTrouble = true; troubleCount++;
+  }
+});
+
+document.getElementById('answer-input').addEventListener('input', function() {
+  if (!accepting) return;
+  var val = this.value.trim();
+  if (val === '' || val === '-') return;
+  var typed = parseInt(val, 10);
+  if (isNaN(typed)) return;
+  if (typed === currentAnswer) {
+    stopPaceTicker();
+    var elapsed = performance.now() - questionStartTime;
+    opData[currentOp].total += elapsed; opData[currentOp].count++;
+    answeredQuestions.push({
+      question: currentQuestion, answer: currentAnswer, op: currentOp,
+      elapsed: elapsed, hadTrouble: currentQuestionHadTrouble, a: currentQA, b: currentQB
+    });
+    score++;
+    document.getElementById('score-display').textContent = score;
+    accepting = false;
+    nextQuestion();
+  }
+});
+
+// ================================================================
+// END GAME
+// ================================================================
+function endGame() {
+  clearInterval(timerInterval); stopPaceTicker(); accepting = false;
+
+  var opAvg = {};
+  for (var op in opData) {
+    opAvg[op] = opData[op].count > 0 ? opData[op].total / opData[op].count : null;
+  }
+
+  var troublePool = [], seen = new Set();
+  for (var i = 0; i < answeredQuestions.length; i++) {
+    var q = answeredQuestions[i];
+    var isSlow = opAvg[q.op] !== null && q.elapsed > 1.5 * opAvg[q.op];
+    if ((q.hadTrouble || isSlow) && !seen.has(q.question)) {
+      troublePool.push(Object.assign({}, q, { isSlow: isSlow }));
+      seen.add(q.question);
+    }
+  }
+
+  var data = loadData();
+  var totalElapsed = 0;
+  for (var j = 0; j < answeredQuestions.length; j++) totalElapsed += answeredQuestions[j].elapsed;
+  var avgTime = answeredQuestions.length > 0 ? totalElapsed / answeredQuestions.length : 0;
+  var total = score + troubleCount;
+  var acc = total === 0 ? 100 : Math.round(score / total * 100);
+
+  data.games.push({
+    ts: Date.now(), duration: duration, score: score, trouble: troubleCount,
+    acc: acc, avgTime: Math.round(avgTime), ops: Array.from(selectedOps),
+    opAvg: (function() {
+      var o = {};
+      for (var k in opAvg) o[k] = opAvg[k] ? Math.round(opAvg[k]) : null;
+      return o;
+    })()
+  });
+
+  for (var ti = 0; ti < troublePool.length; ti++) {
+    var tq = troublePool[ti];
+    if (!data.trouble[tq.question]) {
+      data.trouble[tq.question] = { question: tq.question, answer: tq.answer, op: tq.op, a: tq.a, b: tq.b, count: 0, lastSeen: 0 };
+    }
+    data.trouble[tq.question].count++;
+    data.trouble[tq.question].lastSeen = Date.now();
+  }
+  saveData(data);
+
+  document.getElementById('game-screen').style.display = 'none';
+  document.getElementById('config-screen').style.display = 'block';
+  showPage('results');
+
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('final-sub').textContent = 'correct answer' + (score !== 1 ? 's' : '') + ' in ' + formatTime(duration);
+  document.getElementById('stat-correct').textContent = score;
+  document.getElementById('stat-trouble').textContent = troublePool.length;
+  document.getElementById('stat-acc').textContent = acc + '%';
+
+  var practiceBtn = document.getElementById('practice-last-btn');
+  practiceBtn._pool = troublePool;
+  practiceBtn.disabled = troublePool.length === 0;
+  practiceBtn.textContent = troublePool.length > 0 ? 'Practice trouble (' + troublePool.length + ')' : 'No trouble!';
+
+  buildResultChart();
+}
+
+// ================================================================
+// RESULT CHART
+// ================================================================
+function buildResultChart() {
+  var rows = document.getElementById('chart-rows'); rows.innerHTML = '';
+  var opOrder = ['addition','subtraction','multiplication','division'];
+  var avgs = opOrder.map(function(op) {
+    return { op: op, symbol: opSymbols[op], count: opData[op].count, avg: opData[op].count > 0 ? opData[op].total / opData[op].count : null };
+  });
+  var withData = avgs.filter(function(d) { return d.avg !== null; });
+  if (!withData.length) { rows.innerHTML = '<div class="chart-no-data">No completed questions.</div>'; return; }
+  var maxAvg = Math.max.apply(null, withData.map(function(d) { return d.avg; }));
+  var slowestOp = withData.reduce(function(a,b) { return a.avg > b.avg ? a : b; }).op;
+  avgs.forEach(function(d) {
+    var row = document.createElement('div'); row.className = 'chart-row';
+    var lbl = document.createElement('div'); lbl.className = 'chart-op-label'; lbl.textContent = d.symbol;
+    var track = document.createElement('div'); track.className = 'bar-track';
+    var fill = document.createElement('div'); fill.className = 'bar-fill' + (d.op === slowestOp && withData.length > 1 ? ' slowest' : '');
+    var tl = document.createElement('div'); tl.className = 'chart-time-label';
+    var cl = document.createElement('div'); cl.className = 'chart-count';
+    if (d.avg !== null) {
+      tl.textContent = (d.avg/1000).toFixed(2) + 's'; cl.textContent = 'x' + d.count;
+      (function(f, pct) { setTimeout(function() { f.style.width = pct + '%'; }, 50); })(fill, d.avg / maxAvg * 100);
+    } else { tl.textContent = '-'; lbl.style.opacity = '0.3'; }
+    track.appendChild(fill); row.appendChild(lbl); row.appendChild(track); row.appendChild(tl); row.appendChild(cl);
+    rows.appendChild(row);
+  });
+}
+
+function startPracticeFromResults() {
+  var pool = document.getElementById('practice-last-btn')._pool || [];
+  if (!pool.length) return;
+  _runPractice(pool.map(function(q) { return Object.assign({}, q, { tag: q.hadTrouble ? 'Error' : 'Slow', similar: false }); }));
+  showPage('practice');
+}
+
+// ================================================================
+// HISTORY
+// ================================================================
+var histN = 5;
+function setHistN(btn, n) {
+  document.querySelectorAll('.hist-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active'); histN = n; renderHistory();
+}
+
+function renderHistory() {
+  var data = loadData();
+  var games = data.games.slice(-histN);
+  var tbody = document.getElementById('history-tbody'); tbody.innerHTML = '';
+  var noHist = document.getElementById('no-history');
+  if (!data.games.length) { noHist.style.display = 'block'; return; }
+  noHist.style.display = 'none';
+  var shown = games.slice().reverse();
+  shown.forEach(function(g, i) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + (data.games.length - i) + '</td><td>' + fmtDate(g.ts) + '</td><td>' + formatTime(g.duration) + '</td><td><strong>' + g.score + '</strong></td><td>' + g.acc + '%</td><td>' + (g.avgTime/1000).toFixed(1) + 's</td>';
+    tbody.appendChild(tr);
+  });
+  drawGraph('graph-score', games, function(g) { return g.score; }, '#111');
+  drawGraph('graph-acc',   games, function(g) { return g.acc; },   '#3a9e6f');
+  drawGraph('graph-time',  games, function(g) { return +(g.avgTime/1000).toFixed(2); }, '#e05a3a');
+}
+
+function drawGraph(canvasId, games, getValue, color) {
+  var canvas = document.getElementById(canvasId);
+  var dpr = window.devicePixelRatio || 1;
+  var W = canvas.parentElement.clientWidth - 32 || 400, H = 120;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  var ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0,0,W,H);
+  var vals = games.map(getValue);
+  if (!vals.length) return;
+  if (vals.length < 2) {
+    ctx.fillStyle = '#ddd'; ctx.fillRect(0, H/2-1, W, 2);
+    ctx.beginPath(); ctx.arc(W/2, H/2, 4, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill(); return;
+  }
+  var minV = Math.min.apply(null, vals) * 0.9;
+  var maxV = Math.max.apply(null, vals) * 1.1 || 1;
+  var pad = { t:16, b:8, l:36, r:8 };
+  var gW = W - pad.l - pad.r, gH = H - pad.t - pad.b;
+  function px(i) { return pad.l + (i / (vals.length - 1)) * gW; }
+  function py(v) { return pad.t + gH - ((v - minV) / (maxV - minV)) * gH; }
+  ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+  [0, 0.5, 1].forEach(function(t) { var y = pad.t + gH * (1-t); ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+gW, y); ctx.stroke(); });
+  ctx.beginPath();
+  vals.forEach(function(v, i) { if (i === 0) ctx.moveTo(px(i), py(v)); else ctx.lineTo(px(i), py(v)); });
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.beginPath();
+  vals.forEach(function(v, i) { if (i === 0) ctx.moveTo(px(i), py(v)); else ctx.lineTo(px(i), py(v)); });
+  ctx.lineTo(px(vals.length-1), pad.t+gH); ctx.lineTo(px(0), pad.t+gH); ctx.closePath();
+  ctx.fillStyle = color + '18'; ctx.fill();
+  vals.forEach(function(v, i) { ctx.beginPath(); ctx.arc(px(i), py(v), 3, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill(); });
+  ctx.fillStyle = '#bbb'; ctx.font = '9px Roboto Mono, monospace'; ctx.textAlign = 'right';
+  ctx.fillText(maxV.toFixed(maxV < 10 ? 1 : 0), pad.l - 4, pad.t + 5);
+  ctx.fillText(minV.toFixed(minV < 10 ? 1 : 0), pad.l - 4, pad.t + gH + 1);
+}
+
+function clearHistory() {
+  if (!confirm('Clear all game history and trouble patterns?')) return;
+  saveData({ games: [], trouble: {} }); renderHistory(); renderPatterns();
+}
+
+// ================================================================
+// PATTERN DETECTION
+// ================================================================
+function buildPatterns(trouble) {
+  var entries = Object.values(trouble);
+  if (!entries.length) return [];
+  var patterns = [];
+  var opList = ['addition','subtraction','multiplication','division'];
+
+  // 1. Shared exact operand
+  opList.forEach(function(op) {
+    var opEntries = entries.filter(function(e) { return e.op === op; });
+    if (opEntries.length < 2) return;
+    var sym = opSymbols[op];
+
+    var byA = {};
+    opEntries.forEach(function(e) { if (!byA[e.a]) byA[e.a] = []; byA[e.a].push(e); });
+    Object.keys(byA).forEach(function(aVal) {
+      var items = byA[aVal]; if (items.length < 2) return;
+      patterns.push({
+        id: 'shared_a_' + op + '_' + aVal,
+        title: opName(op) + ': always struggle with ' + aVal + ' ' + sym + ' ?',
+        template: aVal + ' ' + sym + ' ? =',
+        detail: 'You get ' + items.length + ' questions wrong that all involve ' + aVal + '.',
+        examples: items.slice(0,4).map(function(i) { return i.question; }),
+        count: items.reduce(function(s,i) { return s+i.count; }, 0),
+        items: items,
+        generateSimilar: (function(capturedOp, capturedA, capturedItems) {
+          return function() {
+            var bRange = capturedItems.map(function(i) { return i.b; });
+            var bMin = Math.max(1, Math.min.apply(null,bRange) - 5);
+            var bMax = Math.max.apply(null,bRange) + 5;
+            return Object.assign({}, generateQuestion(capturedOp, parseInt(capturedA), randInt(bMin,bMax)), { tag: capturedA + ' ' + sym + ' ?', similar: true });
+          };
+        })(op, aVal, items)
+      });
+    });
+
+    var byB = {};
+    opEntries.forEach(function(e) { if (!byB[e.b]) byB[e.b] = []; byB[e.b].push(e); });
+    Object.keys(byB).forEach(function(bVal) {
+      var items = byB[bVal]; if (items.length < 2) return;
+      patterns.push({
+        id: 'shared_b_' + op + '_' + bVal,
+        title: opName(op) + ': always struggle with ? ' + sym + ' ' + bVal,
+        template: '? ' + sym + ' ' + bVal + ' =',
+        detail: items.length + ' trouble questions all involve the number ' + bVal + '.',
+        examples: items.slice(0,4).map(function(i) { return i.question; }),
+        count: items.reduce(function(s,i) { return s+i.count; }, 0),
+        items: items,
+        generateSimilar: (function(capturedOp, capturedB, capturedItems) {
+          return function() {
+            var aRange = capturedItems.map(function(i) { return i.a; });
+            var aMin = Math.max(1, Math.min.apply(null,aRange) - 5);
+            var aMax = Math.max.apply(null,aRange) + 5;
+            return Object.assign({}, generateQuestion(capturedOp, randInt(aMin,aMax), parseInt(capturedB)), { tag: '? ' + sym + ' ' + capturedB, similar: true });
+          };
+        })(op, bVal, items)
+      });
+    });
+  });
+
+  // 2. Shared units digit
+  ['multiplication','addition','subtraction'].forEach(function(op) {
+    var opEntries = entries.filter(function(e) { return e.op === op; });
+    if (opEntries.length < 3) return;
+    var sym = opSymbols[op];
+    var byUnitsB = {};
+    opEntries.forEach(function(e) { var u = e.b % 10; if (!byUnitsB[u]) byUnitsB[u] = []; byUnitsB[u].push(e); });
+    Object.keys(byUnitsB).forEach(function(u) {
+      var items = byUnitsB[u]; if (items.length < 2) return;
+      patterns.push({
+        id: 'units_b_' + op + '_' + u,
+        title: opName(op) + ': struggle when second number ends in ' + u,
+        template: '? ' + sym + ' ?' + u + ' =',
+        detail: items.length + ' trouble questions where the second number ends in ' + u + '.',
+        examples: items.slice(0,4).map(function(i) { return i.question; }),
+        count: items.reduce(function(s,i) { return s+i.count; }, 0),
+        items: items,
+        generateSimilar: (function(capturedOp, capturedU, capturedItems) {
+          return function() {
+            var ref = capturedItems[Math.floor(Math.random()*capturedItems.length)];
+            var newB = clamp(Math.floor(ref.b/10)*10 + randInt(-2,2)*10 + parseInt(capturedU), 2, 999);
+            return Object.assign({}, generateQuestion(capturedOp, ref.a+randInt(-2,2), newB), { tag: '? ' + opSymbols[capturedOp] + ' ?' + capturedU, similar: true });
+          };
+        })(op, u, items)
+      });
+    });
+  });
+
+  // 3. Number range clusters
+  opList.forEach(function(op) {
+    var opEntries = entries.filter(function(e) { return e.op === op; });
+    if (opEntries.length < 3) return;
+    var sym = opSymbols[op];
+    var buckets = {};
+    opEntries.forEach(function(e) { var bucket = Math.floor(e.b/10)*10; if (!buckets[bucket]) buckets[bucket] = []; buckets[bucket].push(e); });
+    Object.keys(buckets).forEach(function(lo) {
+      var items = buckets[lo]; if (items.length < 2) return;
+      var hi = parseInt(lo) + 9;
+      patterns.push({
+        id: 'range_' + op + '_' + lo,
+        title: opName(op) + ': numbers in the ' + lo + '-' + hi + ' range',
+        template: '? ' + sym + ' ' + lo + '-' + hi + ' =',
+        detail: items.length + ' trouble questions where one number falls between ' + lo + ' and ' + hi + '.',
+        examples: items.slice(0,4).map(function(i) { return i.question; }),
+        count: items.reduce(function(s,i) { return s+i.count; }, 0),
+        items: items,
+        generateSimilar: (function(capturedOp, capturedLo, capturedHi, capturedItems) {
+          return function() {
+            var ref = capturedItems[Math.floor(Math.random()*capturedItems.length)];
+            return Object.assign({}, generateQuestion(capturedOp, ref.a+randInt(-2,2), randInt(capturedLo, capturedHi)), { tag: capturedLo + '-' + capturedHi + ' range', similar: true });
+          };
+        })(op, parseInt(lo), hi, items)
+      });
+    });
+  });
+
+  // 4. Repeatedly missed
+  var repeated = entries.filter(function(e) { return e.count >= 2; });
+  if (repeated.length >= 1) {
+    patterns.push({
+      id: 'repeated',
+      title: 'Repeatedly missed',
+      template: '(same questions, multiple games)',
+      detail: repeated.length + ' question' + (repeated.length > 1 ? 's' : '') + ' you\'ve got wrong in multiple separate games.',
+      examples: repeated.slice(0,4).map(function(i) { return i.question; }),
+      count: repeated.reduce(function(s,i) { return s+i.count; }, 0),
+      items: repeated,
+      generateSimilar: (function(capturedRepeated) {
+        return function() {
+          var ref = capturedRepeated[Math.floor(Math.random()*capturedRepeated.length)];
+          return { question: ref.question, answer: ref.answer, op: ref.op, a: ref.a, b: ref.b, tag: 'Repeated miss', similar: false };
+        };
+      })(repeated)
+    });
+  }
+
+  // Scoring and pruning
+  function specificityBonus(id) {
+    if (id === 'repeated')        return 4;
+    if (id.indexOf('shared_') === 0) return 3;
+    if (id.indexOf('units_') === 0)  return 2;
+    if (id.indexOf('range_') === 0)  return 2;
+    return 1;
+  }
+
+  var seenIds = new Set();
+  var unique = patterns.filter(function(p) {
+    if (seenIds.has(p.id)) return false;
+    seenIds.add(p.id); return true;
+  });
+
+  unique.forEach(function(p) { p._score = p.count * specificityBonus(p.id); });
+  unique.sort(function(a,b) { return b._score - a._score; });
+
+  var selected = [], coveredQuestions = new Set();
+  for (var i = 0; i < unique.length; i++) {
+    if (selected.length >= 6) break;
+    var p = unique[i];
+    var pQs = new Set(p.items.map(function(it) { return it.question; }));
+    var overlap = 0;
+    pQs.forEach(function(q) { if (coveredQuestions.has(q)) overlap++; });
+    if (pQs.size > 0 && overlap / pQs.size > 0.75) continue;
+    selected.push(p);
+    pQs.forEach(function(q) { coveredQuestions.add(q); });
+  }
+  return selected;
+}
+
+// ================================================================
+// PATTERNS PAGE
+// ================================================================
+function renderPatterns() {
+  var data = loadData();
+  var patterns = buildPatterns(data.trouble);
+  var list = document.getElementById('patterns-list'); list.innerHTML = '';
+  var noP = document.getElementById('no-patterns');
+  if (!patterns.length) {
+    noP.style.display = 'block';
+    noP.textContent = data.games.length < 2 ? 'Play at least 2 games to see patterns.' : 'No patterns yet - great work!';
+    return;
+  }
+  noP.style.display = 'none';
+  var maxCount = patterns[0].count;
+  patterns.forEach(function(p) {
+    var card = document.createElement('div'); card.className = 'pattern-card';
+    var exChips = p.examples.map(function(ex) { return '<span class="pattern-ex-chip">' + ex.replace('=','').trim() + '</span>'; }).join('');
+    card.innerHTML = '<div class="pattern-card-header"><div class="pattern-card-title">' + p.title + '</div><div class="pattern-card-count">' + p.count + ' miss' + (p.count > 1 ? 'es' : '') + '</div></div><div class="pattern-bar-wrap"><div class="pattern-bar-fill" style="width:' + Math.round(p.count/maxCount*100) + '%"></div></div><div class="pattern-card-detail">' + p.detail + '</div><div class="pattern-template">' + p.template + '</div><div class="pattern-examples">' + exChips + '</div><button class="pattern-practice-btn">Practice this pattern</button>';
+    card.querySelector('.pattern-practice-btn').addEventListener('click', function() { practicePattern(p.id); });
+    list.appendChild(card);
+  });
+}
+
+// ================================================================
+// PRACTICE PAGE
+// ================================================================
+var _cachedPatterns = [];
+
+function renderPracticeConfig() {
+  var data = loadData();
+  _cachedPatterns = buildPatterns(data.trouble);
+  var list = document.getElementById('pattern-pick-list'); list.innerHTML = '';
+  showPracticeConfig();
+  if (!_cachedPatterns.length) {
+    list.innerHTML = '<div class="no-patterns" style="display:block">No patterns yet. Play more games first.</div>';
+    document.getElementById('practice-start-btn').disabled = true;
+    return;
+  }
+  document.getElementById('practice-start-btn').disabled = false;
+  _cachedPatterns.forEach(function(p) {
+    var row = document.createElement('div'); row.className = 'op-row active'; row.dataset.pid = p.id;
+    row.innerHTML = '<div class="op-check" style="background:#111;border-color:#111;color:white">&#10003;</div><div style="flex:1"><div class="op-label" style="margin-bottom:2px;font-size:0.7rem">' + p.title + '</div><div style="font-size:0.56rem;color:#999">' + p.count + ' miss' + (p.count > 1 ? 'es' : '') + ' - ' + p.items.length + ' question' + (p.items.length > 1 ? 's' : '') + '</div></div>';
+    row.addEventListener('click', function() {
+      var check = row.querySelector('.op-check');
+      if (row.classList.contains('active')) {
+        row.classList.remove('active');
+        check.style.background = ''; check.style.borderColor = '#ccc'; check.style.color = ''; check.textContent = '';
+      } else {
+        row.classList.add('active');
+        check.style.background = '#111'; check.style.borderColor = '#111'; check.style.color = 'white'; check.textContent = '\u2713';
+      }
+    });
+    list.appendChild(row);
+  });
+}
+
+function showPracticeConfig() {
+  document.getElementById('practice-config').style.display = 'block';
+  document.getElementById('practice-game').style.display = 'none';
+  document.getElementById('practice-done').style.display = 'none';
+}
+
+function practicePattern(pid) {
+  showPage('practice');
+  setTimeout(function() {
+    document.querySelectorAll('#pattern-pick-list .op-row').forEach(function(row) {
+      var check = row.querySelector('.op-check');
+      var active = row.dataset.pid === pid;
+      row.classList.toggle('active', active);
+      if (active) { check.style.background = '#111'; check.style.borderColor = '#111'; check.style.color = 'white'; check.textContent = '\u2713'; }
+      else { check.style.background = ''; check.style.borderColor = '#ccc'; check.style.color = ''; check.textContent = ''; }
+    });
+    startPracticeSession();
+  }, 50);
+}
+
+var _practiceQueue = [], _pracCurrentAnswer = null, _pracHadError = false, _pracRight = 0, _pracTotal = 0;
+
+function startPracticeSession() {
+  var activePids = new Set(Array.from(document.querySelectorAll('#pattern-pick-list .op-row.active')).map(function(r) { return r.dataset.pid; }));
+  var selected = _cachedPatterns.filter(function(p) { return activePids.has(p.id); });
+  if (!selected.length) { alert('Select at least one pattern.'); return; }
+
+  var queue = [], seen = new Set();
+  selected.forEach(function(p) {
+    p.items.forEach(function(item) {
+      if (!seen.has(item.question)) {
+        queue.push({ question: item.question, answer: item.answer, op: item.op, a: item.a, b: item.b, tag: 'Exact miss', similar: false });
+        seen.add(item.question);
+      }
+    });
+    var attempts = 0;
+    for (var i = 0; i < p.items.length && attempts < 30; attempts++) {
+      try {
+        var sim = p.generateSimilar();
+        if (!seen.has(sim.question)) { queue.push(sim); seen.add(sim.question); i++; }
+      } catch(e) { break; }
+    }
+  });
+
+  _practiceQueue = queue.sort(function() { return Math.random() - 0.5; }).map(function(q) {
+    return Object.assign({}, q, { _cleared: false, _failed: false, _seen: false });
+  });
+  _pracRight = 0; _pracTotal = 0; _practiceQueue._current = null;
+
+  document.getElementById('practice-config').style.display = 'none';
+  document.getElementById('practice-game').style.display = 'flex';
+  document.getElementById('practice-done').style.display = 'none';
+  showNextPractice();
+  document.getElementById('practice-input').focus();
+}
+
+function showNextPractice() {
+  var remaining = _practiceQueue.filter(function(q) { return !q._cleared; });
+  var unseen = remaining.filter(function(q) { return !q._seen; });
+  if (!unseen.length) {
+    var failed = remaining.filter(function(q) { return q._failed; });
+    if (failed.length) {
+      failed.forEach(function(q) { q._failed = false; q._seen = false; });
+      _practiceQueue = failed.sort(function() { return Math.random() - 0.5; });
+      showNextPractice(); return;
+    }
+    document.getElementById('practice-game').style.display = 'none';
+    document.getElementById('practice-done').style.display = 'block';
+    document.getElementById('prac-done-score').textContent = _pracRight + '/' + _pracTotal;
+    return;
+  }
+  var q = unseen[0]; q._seen = true;
+  _pracCurrentAnswer = q.answer; _pracHadError = false; _practiceQueue._current = q;
+  var idx = remaining.length - unseen.length + 1;
+  var tagWrap = document.getElementById('practice-tag-wrap'); tagWrap.innerHTML = '';
+  var t = document.createElement('span');
+  t.className = 'practice-tag ' + (q.similar ? 'tag-similar' : 'tag-exact');
+  t.textContent = q.tag || (q.similar ? 'Similar' : 'Exact miss');
+  tagWrap.appendChild(t);
+  document.getElementById('practice-question').textContent = q.question;
+  document.getElementById('prac-progress').textContent = idx + '/' + remaining.length;
+  document.getElementById('prac-remaining').textContent = remaining.length - idx;
+  var inp = document.getElementById('practice-input'); inp.value = ''; inp.focus();
+}
+
+document.getElementById('practice-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Backspace' && !_pracHadError) {
+    _pracHadError = true;
+    if (_practiceQueue._current) _practiceQueue._current._failed = true;
+  }
+});
+
+document.getElementById('practice-input').addEventListener('input', function() {
+  var val = this.value.trim();
+  if (val === '' || val === '-') return;
+  var typed = parseInt(val, 10); if (isNaN(typed)) return;
+  if (typed === _pracCurrentAnswer) {
+    _pracTotal++;
+    if (!_pracHadError && _practiceQueue._current) { _practiceQueue._current._cleared = true; _pracRight++; }
+    showNextPractice();
+  }
+});
+
+function endPracticeSession() {
+  document.getElementById('practice-game').style.display = 'none';
+  document.getElementById('practice-done').style.display = 'block';
+  document.getElementById('prac-done-score').textContent = _pracRight + '/' + _pracTotal;
+}
+
+function _runPractice(items) {
+  _practiceQueue = items.map(function(q) { return Object.assign({}, q, { _cleared: false, _failed: false, _seen: false }); });
+  _pracRight = 0; _pracTotal = 0; _practiceQueue._current = null;
+  document.getElementById('practice-config').style.display = 'none';
+  document.getElementById('practice-game').style.display = 'flex';
+  document.getElementById('practice-done').style.display = 'none';
+  showNextPractice();
+  document.getElementById('practice-input').focus();
+}
+
+// ================================================================
+// INIT
+// ================================================================
+renderHistory();
+renderPatterns();
+renderPracticeConfig();
+loadPacePreference();
+
+// Expose to window for inline onclick handlers
+window.startGame = startGame;
+window.quitGame = quitGame;
+window.toggleOp = toggleOp;
+window.stopProp = stopProp;
+window.setPaceVisible = setPaceVisible;
+window.setHistN = setHistN;
+window.clearHistory = clearHistory;
+window.startPracticeFromResults = startPracticeFromResults;
+window.showPage = showPage;
+window.startPracticeSession = startPracticeSession;
+window.endPracticeSession = endPracticeSession;
+window.showPracticeConfig = showPracticeConfig;
+window.practicePattern = practicePattern;
+})();
+</script>
+</body>
+</html>
