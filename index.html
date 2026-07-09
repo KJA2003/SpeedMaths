@@ -628,12 +628,8 @@ body { background: var(--bg); color: var(--text); }
 /* ===== Custom numeric keypad (touch devices; .kp-on toggled by JS on input focus) ===== */
 .keypad { display: none; }
 :root.kp-on .keypad {
-  display: flex; flex-direction: column; align-items: center; gap: 7px;
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
-  padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
-  background: var(--track); border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; width: 100%; margin: 14px 0 0;
 }
-:root.kp-on body { padding-bottom: 160px; }
 .keypad-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; width: 100%; max-width: 480px; }
 .key {
   height: 54px; border: none; border-radius: 10px; background: var(--surface); color: var(--text);
@@ -3665,7 +3661,11 @@ window.retryLearnLevel = retryLearnLevel;
   for (var i = 0; i < inputs.length; i++) inputs[i].setAttribute('inputmode', 'none');
 
   var activeInput = null, hideTimer = null;
-  function showPad(){ if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } root.classList.add('kp-on'); }
+  function showPad(){
+    if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; }
+    if (activeInput) activeInput.insertAdjacentElement('afterend', pad);  // in-flow, right below the focused input
+    root.classList.add('kp-on');
+  }
   function hidePad(){ root.classList.remove('kp-on'); }
 
   document.addEventListener('focusin', function(e){
