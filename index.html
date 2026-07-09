@@ -485,15 +485,20 @@ body { background: var(--bg); color: var(--text); }
 .history-table th { font-size: 0.6rem; }
 .no-history, .no-patterns { font-size: 0.72rem; }
 
-/* Compact operation chips + ranges expander */
-.op-chips { display: flex; gap: 6px; margin-bottom: 10px; width: 100%; }
+/* Operation selector — settings-style toggle chips */
+.field-hint { font-size: 0.64rem; color: var(--muted); margin-bottom: 10px; }
+.op-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; width: 100%; }
 .op-chip {
-  flex: 1; padding: 14px 0; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; font-family: 'Roboto Mono', monospace; font-size: 1.5rem; line-height: 1;
-  color: var(--muted); cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 8px 13px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; font-family: 'Roboto Mono', monospace; font-size: 0.76rem;
+  color: var(--muted); cursor: pointer; transition: color 0.12s, border-color 0.12s;
 }
+.op-chip .op-sym { font-weight: 700; font-size: 0.9rem; }
+.op-chip .op-check { display: none; font-size: 0.68rem; }
 .op-chip:hover { border-color: var(--muted); }
-.op-chip.active { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+.op-chip.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.op-chip.active .op-check { display: inline; }
 .ranges-toggle {
   background: none; border: none; color: var(--muted); cursor: pointer;
   font-family: 'Roboto Mono', monospace; font-size: 0.62rem; letter-spacing: 1.5px;
@@ -510,6 +515,26 @@ body { background: var(--bg); color: var(--text); }
   font-family: 'Roboto Mono', monospace; cursor: pointer;
 }
 .menu-toggle-sub { display: block; font-size: 0.6rem; color: var(--muted); margin-top: 3px; }
+
+/* Landing "ghost demo" — a looping mock game shown in the intro box */
+.intro-demo {
+  margin: 4px 0 0; padding: 16px 12px; border-radius: 8px; background: var(--track);
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  min-height: 96px; justify-content: center; user-select: none; overflow: hidden;
+}
+.demo-q { font-family: 'Roboto Mono', monospace; font-weight: 700; font-size: 1.7rem; color: var(--text); letter-spacing: -0.5px; }
+.demo-a {
+  font-family: 'Roboto Mono', monospace; font-weight: 700; font-size: 1.5rem; color: var(--text);
+  display: flex; align-items: center; min-height: 1.6em; transition: color 0.2s ease;
+}
+.demo-a.demo-correct { color: var(--green); }
+.demo-caret {
+  display: inline-block; width: 2px; height: 1.4rem; background: var(--accent);
+  margin-left: 3px; animation: demoBlink 1s step-end infinite;
+}
+.intro-demo.demo-static .demo-caret { display: none; }
+@keyframes demoBlink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .demo-caret { animation: none; } }
 
 /* ===== Ad slots (same units as maffdoku: side rails on desktop, M_1 on mobile) ===== */
 .desktopSideAd { display: none; }
@@ -2618,7 +2643,7 @@ function updateFirstTimeState() {
   var banner = document.getElementById('welcome-banner');
   var dismissed = false;
   try { dismissed = localStorage.getItem('arith_welcome_dismissed') === '1'; } catch(e) {}
-  if (banner) banner.style.display = (hasGames || dismissed) ? 'none' : 'block';
+  if (banner) banner.style.display = dismissed ? 'none' : 'block';
 
   // Lock Results/History/Practise tabs until games played
   var resultsBtn = document.querySelector('.nav-btn[data-page="results"]');
@@ -3189,33 +3214,22 @@ window.retryLearnLevel = retryLearnLevel;
   <!-- First-time welcome banner -->
   <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:20px 18px;margin-bottom:20px;position:relative">
     <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
-    <div style="font-size:1.2rem;font-weight:700;margin-bottom:8px;color:var(--text)">Welcome to Mathlete</div>
-    <div style="font-size:0.8rem;color:var(--muted);line-height:1.7;margin-bottom:14px">
-      A mental-maths speed drill: type your answer and it submits the moment it's right. Backspace flags a question to practise later. Pick your operations and duration, then hit Start.
+    <div style="font-size:1.15rem;font-weight:700;margin-bottom:12px;color:var(--text)">Welcome to Mathlete</div>
+    <div class="intro-demo" id="intro-demo" aria-hidden="true">
+      <div class="demo-q" id="demo-q">7 &times; 8 =</div>
+      <div class="demo-a" id="demo-a"><span id="demo-typed"></span><span class="demo-caret"></span></div>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <div style="flex:1;min-width:120px;background:var(--track);padding:11px 12px;border-radius:6px">
-        <div style="font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Play</div>
-        <div style="font-size:0.72rem;color:var(--muted);line-height:1.55">Speed drills with your settings; weak-spot patterns tracked.</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:var(--track);padding:11px 12px;border-radius:6px">
-        <div style="font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Learn</div>
-        <div style="font-size:0.72rem;color:var(--muted);line-height:1.55">500 levels, trivially easy to world-record pace.</div>
-      </div>
-      <div style="flex:1;min-width:120px;background:var(--track);padding:11px 12px;border-radius:6px">
-        <div style="font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Leaderboard</div>
-        <div style="font-size:0.72rem;color:var(--muted);line-height:1.55">Global top scores. Default settings only.</div>
-      </div>
-    </div>
+    <div style="font-size:0.74rem;color:var(--muted);line-height:1.6;text-align:center;margin-top:12px">Type your answer — it submits the instant it's right. No enter key.</div>
   </div>
 
   <div id="config-screen" style="width:100%">
     <div class="section-label">Operations</div>
+    <div class="field-hint">Select operations to include</div>
     <div class="op-chips">
-      <button class="op-chip active" data-op="addition"       onclick="toggleOp(event,this)" aria-label="Addition">+</button>
-      <button class="op-chip active" data-op="subtraction"    onclick="toggleOp(event,this)" aria-label="Subtraction">&minus;</button>
-      <button class="op-chip active" data-op="multiplication" onclick="toggleOp(event,this)" aria-label="Multiplication">&times;</button>
-      <button class="op-chip active" data-op="division"       onclick="toggleOp(event,this)" aria-label="Division">&divide;</button>
+      <button class="op-chip active" data-op="addition"       onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">+</span>Add</button>
+      <button class="op-chip active" data-op="subtraction"    onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">&minus;</span>Subtract</button>
+      <button class="op-chip active" data-op="multiplication" onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">&times;</span>Multiply</button>
+      <button class="op-chip active" data-op="division"       onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">&divide;</span>Divide</button>
     </div>
     <button class="ranges-toggle" id="ranges-toggle" onclick="toggleRanges()" aria-expanded="false">Customise ranges &#9662;</button>
     <div class="ranges-panel" id="ranges-panel" style="display:none">
@@ -3548,6 +3562,65 @@ window.retryLearnLevel = retryLearnLevel;
 
   <a class="menu-privacy" href="https://www.nerdlegame.com/privacy.html">Privacy policy</a>
 </aside>
+
+<script>
+// ===== Landing ghost-demo: a looping mock game inside the intro box =====
+// Only animates while the Play landing (config screen) is actually on-screen;
+// pauses on game start, tab switch, dismiss, backgrounded tab, reduced-motion.
+(function(){
+  var reduced = false;
+  try { reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  var QS = [
+    { q: '7 × 8 =',  a: '56' },
+    { q: '45 + 38 =',      a: '83' },
+    { q: '96 ÷ 8 =',  a: '12' },
+    { q: '63 − 27 =', a: '36' },
+    { q: '9 × 7 =',   a: '63' }
+  ];
+  var idx = 0, timer = null;
+  function el(id){ return document.getElementById(id); }
+  function sched(fn, ms){ if (timer) clearTimeout(timer); timer = setTimeout(fn, ms); }
+  function active(){
+    if (document.hidden) return false;
+    var banner = el('welcome-banner');
+    if (!banner || banner.style.display === 'none') return false;
+    var play = el('page-play');
+    if (!play || !play.classList.contains('active')) return false;
+    var cfg = el('config-screen');
+    if (cfg && cfg.style.display === 'none') return false;  // a game is in progress
+    return true;
+  }
+  function runQuestion(item, done){
+    var q = el('demo-q'), t = el('demo-typed'), a = el('demo-a');
+    if (!q || !t || !a) { sched(done, 600); return; }
+    q.textContent = item.q; t.textContent = ''; a.classList.remove('demo-correct');
+    var digits = item.a.split(''), i = 0;
+    function typeNext(){
+      if (!active()) { sched(function(){ runQuestion(item, done); }, 500); return; }
+      if (i < digits.length) { t.textContent += digits[i]; i++; sched(typeNext, 150); }
+      else { a.classList.add('demo-correct'); sched(done, 750); }
+    }
+    sched(typeNext, 550);
+  }
+  function loop(){
+    if (!active()) { sched(loop, 500); return; }
+    runQuestion(QS[idx], function(){ idx = (idx + 1) % QS.length; sched(loop, 550); });
+  }
+  function init(){
+    if (!el('intro-demo')) return;
+    if (reduced) {
+      var q = el('demo-q'), t = el('demo-typed'), box = el('intro-demo'), a = el('demo-a');
+      if (q) q.textContent = QS[0].q;
+      if (t) t.textContent = QS[0].a;
+      if (box) box.classList.add('demo-static');
+      if (a) a.classList.add('demo-correct');
+      return;
+    }
+    loop();
+  }
+  init();
+})();
+</script>
 
 <script>
 // ===== Nerdleverse menu: fetch the shared game list and render it =====
