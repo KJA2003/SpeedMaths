@@ -51,7 +51,7 @@
   --bg:#f2f2f0; --surface:#ffffff; --text:#161803; --muted:#6f7370;
   --faint:#8f928d; --border:#dcdcd6; --track:#eeeee8;
   --accent:#820458; --accent-hover:#6a0247; --accent-contrast:#ffffff;
-  --green:#398874; --red:#c85a3c; --brand:#820458;
+  --green:#398874; --red:#c85a3c; --orange:#e0872e; --brand:#820458;
   color-scheme: light dark;
 }
 @media (prefers-color-scheme: dark){
@@ -59,7 +59,7 @@
     --bg:#1b2130; --surface:#252d3d; --text:#dfe1e3; --muted:#9aa0ab;
     --faint:#7e8794; --border:#39424f; --track:#2c3444;
     --accent:#c24d92; --accent-hover:#d466a6; --accent-contrast:#ffffff;
-    --green:#4db699; --red:#e07d63; --brand:#e987be;
+    --green:#4db699; --red:#e07d63; --orange:#f0a552; --brand:#e987be;
   }
 }
 :root[data-theme="dark"]{
@@ -396,8 +396,8 @@ body { background: var(--bg); color: var(--text); }
 
 /* Functional colours */
 .pace-number { color: var(--muted); }
-.pace-fill.behind { background: var(--red); }
-.pace-number.behind { color: var(--red); }
+.pace-fill.behind { background: var(--orange); }
+.pace-number.behind { color: var(--orange); }
 .pace-fill.ahead { background: var(--green); }
 .pace-number.ahead, .lb-name.you { color: var(--green); }
 .streak-popup { background: var(--surface); border-color: var(--accent); }
@@ -622,12 +622,20 @@ body { background: var(--bg); color: var(--text); }
 .hud-key { font-size: 0.5rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); line-height: 1.3; }
 .timer-row .hud-val { font-size: 1.05rem; font-weight: 700; color: var(--text); line-height: 1.1; margin-top: 1px; }
 
-/* Pace label · bar · number · Stop all on one line below the answer */
-.game-controls { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; margin-top: 24px; }
-.game-controls .pace-wrap { flex: 1; flex-direction: row; align-items: center; gap: 10px; width: auto; margin-top: 0; min-height: 0; }
-.game-controls .pace-bar-wrap { flex: 1; width: auto; }
-.game-controls .pace-label, .game-controls .pace-number { flex-shrink: 0; white-space: nowrap; }
-.game-controls .stop-btn { margin-top: 0; flex-shrink: 0; }
+/* Average line: pace label · bar · number on one horizontal row */
+.pace-wrap { flex-direction: row; align-items: center; gap: 10px; margin-top: 22px; min-height: 0; }
+.pace-bar-wrap { flex: 1; width: auto; }
+.pace-label, .pace-number { flex-shrink: 0; white-space: nowrap; }
+.pace-wrap.ahead  .pace-label, .pace-wrap.ahead  .pace-number { color: var(--green); }
+.pace-wrap.behind .pace-label, .pace-wrap.behind .pace-number { color: var(--orange); }
+
+/* Focus mode during play: hide the tabs, show STOP in the header next to the menu */
+:root.playing .nav { display: none; }
+.stop-header { display: none; }
+:root.playing .stop-header {
+  display: inline-flex; align-items: center; align-self: center;
+  margin: 0 0 0 16px; padding: 5px 9px; line-height: 1;
+}
 
 /* ===== Custom numeric keypad (touch devices; .kp-on toggled by JS on input focus) ===== */
 .keypad { display: none; }
@@ -891,6 +899,7 @@ function updatePace() {
   var fill = document.getElementById('pace-fill');
   var num  = document.getElementById('pace-number');
   var lbl  = document.getElementById('pace-label');
+  var wrap = document.getElementById('pace-wrap');
   var avg  = opData[currentOp].count > 0 ? opData[currentOp].total / opData[currentOp].count : null;
   var elapsed = performance.now() - questionStartTime;
 
@@ -898,6 +907,7 @@ function updatePace() {
     if (_lastDir !== 'noavg') {
       fill.style.width = '0%'; fill.className = 'pace-fill';
       num.className = 'pace-number no-avg'; lbl.textContent = 'no avg yet';
+      wrap.classList.remove('ahead','behind'); wrap.classList.add('no-avg');
       _lastDir = 'noavg';
     }
     num.textContent = (elapsed / 1000).toFixed(1) + 's';
@@ -922,9 +932,11 @@ function updatePace() {
   if (dir === 'behind') {
     fill.className = 'pace-fill behind'; fill.style.left = '50%'; fill.style.right = ''; fill.style.width = pct;
     num.textContent = '+' + diffSec + 's'; num.className = 'pace-number behind';
+    wrap.classList.remove('ahead','no-avg'); wrap.classList.add('behind');
   } else {
     fill.className = 'pace-fill ahead'; fill.style.right = '50%'; fill.style.left = ''; fill.style.width = pct;
     num.textContent = diffSec + 's'; num.className = 'pace-number ahead';
+    wrap.classList.remove('behind','no-avg'); wrap.classList.add('ahead');
   }
   paceRafId = requestAnimationFrame(updatePace);
 }
@@ -936,6 +948,7 @@ function startPaceTicker() {
   document.getElementById('pace-fill').className = 'pace-fill';
   document.getElementById('pace-number').textContent = '';
   document.getElementById('pace-label').textContent = 'vs your avg';
+  document.getElementById('pace-wrap').classList.remove('ahead','behind','no-avg');
   if (paceVisible) paceRafId = requestAnimationFrame(updatePace);
 }
 
@@ -954,6 +967,7 @@ function startGame() {
 
   document.getElementById('config-screen').style.display = 'none';
   document.getElementById('game-screen').style.display = 'flex';
+  document.documentElement.classList.add('playing');  // focus mode: hide the tab bar
   document.getElementById('score-display').textContent = '0';
   document.getElementById('timer-display').textContent = formatTime(timeLeft);
 
@@ -986,6 +1000,7 @@ function nextQuestion() {
 
 function quitGame() {
   clearInterval(timerInterval); stopPaceTicker(); accepting = false;
+  document.documentElement.classList.remove('playing');
   document.getElementById('game-screen').style.display = 'none';
   document.getElementById('config-screen').style.display = 'block';
   showPage('play');
@@ -1089,6 +1104,7 @@ function endGame() {
   var _newStreak = updateStreak();
   if (_newStreak) _pendingStreakN = _newStreak;
 
+  document.documentElement.classList.remove('playing');
   document.getElementById('game-screen').style.display = 'none';
   document.getElementById('config-screen').style.display = 'block';
   updateFirstTimeState();
@@ -3286,6 +3302,7 @@ window.retryLearnLevel = retryLearnLevel;
   <button class="icon-btn" aria-label="Menu" onclick="openMenu()">
     <svg width="22" height="16" viewBox="0 0 24 17" fill="currentColor" aria-hidden="true"><path d="M0 16.07V13.4h24v2.67H0zM0 9.4V6.74h24V9.4H0zM0 2.74V.07h24v2.67H0z"></path></svg>
   </button>
+  <button class="stop-btn stop-header" onclick="quitGame()">Stop</button>
   <span class="header-spacer"></span>
   <a class="brand-block" href="https://www.nerdlegame.com" aria-label="Mathlete by nerdle">
     <span class="brand-mark"><span class="m-word">mathlete</span><span class="m-dot">.</span></span>
@@ -3373,13 +3390,10 @@ window.retryLearnLevel = retryLearnLevel;
     </div>
     <div class="question" id="question-display"></div>
     <input class="answer-input" id="answer-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
-    <div class="game-controls">
-      <div class="pace-wrap" id="pace-wrap">
-        <div class="pace-label" id="pace-label">vs your avg</div>
-        <div class="pace-bar-wrap"><div class="pace-fill" id="pace-fill"></div></div>
-        <div class="pace-number" id="pace-number"></div>
-      </div>
-      <button class="stop-btn" onclick="quitGame()">Stop</button>
+    <div class="pace-wrap" id="pace-wrap">
+      <div class="pace-label" id="pace-label">vs your avg</div>
+      <div class="pace-bar-wrap"><div class="pace-fill" id="pace-fill"></div></div>
+      <div class="pace-number" id="pace-number"></div>
     </div>
   </div>
 </div>
