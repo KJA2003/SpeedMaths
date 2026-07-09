@@ -589,11 +589,17 @@ body { background: var(--bg); color: var(--text); }
   .desktopSideAd {
     display: flex; flex: 3; overflow: hidden; align-items: flex-start; min-width: 0; padding-top: 90px;
   }
-  #nerdlegame_D_x1.desktopSideAd { justify-content: flex-start; margin: 0 2rem 0 1rem; }
-  #nerdlegame_D_x2.desktopSideAd { justify-content: flex-end;   margin: 0 1rem 0 2rem; }
-  /* keep the injected ad pinned to the outer edge of each rail */
-  #nerdlegame_D_x1 iframe, #nerdlegame_D_x1 > div { margin-left: 0 !important; margin-right: auto !important; }
-  #nerdlegame_D_x2 iframe, #nerdlegame_D_x2 > div { margin-left: auto !important; margin-right: 0 !important; }
+  #nerdlegame_D_x1.desktopSideAd, #ad-wrapper-nerdlegame_D_x1.desktopSideAd { justify-content: flex-start; text-align: left;  margin: 0 2rem 0 1rem; }
+  #nerdlegame_D_x2.desktopSideAd, #ad-wrapper-nerdlegame_D_x2.desktopSideAd { justify-content: flex-end;   text-align: right; margin: 0 1rem 0 2rem; }
+  /* lngtd wraps the slot in #ad-wrapper-* and moves the id onto an inner div */
+  #ad-wrapper-nerdlegame_D_x1 #nerdlegame_D_x1, #ad-wrapper-nerdlegame_D_x2 #nerdlegame_D_x2 { display: flex; width: 100%; }
+  #ad-wrapper-nerdlegame_D_x1 #nerdlegame_D_x1 { justify-content: flex-start; text-align: left !important; }
+  #ad-wrapper-nerdlegame_D_x2 #nerdlegame_D_x2 { justify-content: flex-end;   text-align: right !important; }
+  /* pin the injected ad markup to the outer edge of each rail */
+  #nerdlegame_D_x1 iframe, #nerdlegame_D_x1 > div,
+  #ad-wrapper-nerdlegame_D_x1 iframe, #ad-wrapper-nerdlegame_D_x1 > div > div { margin-left: 0 !important; margin-right: auto !important; }
+  #nerdlegame_D_x2 iframe, #nerdlegame_D_x2 > div,
+  #ad-wrapper-nerdlegame_D_x2 iframe, #ad-wrapper-nerdlegame_D_x2 #nerdlegame_D_x2 > div { margin-left: auto !important; margin-right: 0 !important; }
 }
 @media (max-width: 999px) {
   .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 10px 20px 6px; text-align: center; }
