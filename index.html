@@ -362,6 +362,59 @@ body { background: var(--bg); color: var(--text); }
 #alltime-banner, #welcome-banner, #learn-info-view > div, #learn-map-view,
 [id^="learn-"] .theme-surface { background: var(--surface) !important; border-color: var(--border) !important; }
 #name-modal input, #skip-modal input { color: var(--text) !important; border-bottom-color: var(--accent) !important; }
+
+/* ===== Nerdleverse menu (left slide-in drawer) ===== */
+.menu-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 9998;
+  opacity: 0; visibility: hidden; transition: opacity 0.2s ease;
+}
+.menu-overlay.open { opacity: 1; visibility: visible; }
+.menu-panel {
+  position: fixed; top: 0; left: 0; bottom: 0; width: 380px; max-width: 88%;
+  background: var(--bg); color: var(--text); z-index: 9999;
+  transform: translateX(-100%); transition: transform 0.28s cubic-bezier(0.16,1,0.3,1);
+  overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 18px 20px 48px;
+  box-shadow: 2px 0 24px rgba(0,0,0,0.18);
+}
+.menu-panel.open { transform: translateX(0); }
+.menu-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.menu-brand {
+  font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 1.4rem;
+  letter-spacing: -0.5px; color: var(--brand); text-decoration: none;
+}
+.menu-brand .m-dot { color: var(--faint); font-family: 'Times New Roman', serif; }
+.menu-close { background: none; border: none; cursor: pointer; color: var(--text); padding: 4px; }
+.menu-item {
+  display: flex; align-items: center; gap: 12px; padding: 11px 6px; cursor: pointer;
+  color: var(--text); font-size: 0.8rem; text-decoration: none; border-radius: 8px;
+  font-family: 'Roboto Mono', monospace;
+}
+.menu-item:hover { background: var(--track); }
+.menu-item .mi-ico { width: 22px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 1rem; }
+.menu-item .mi-ico img { display: block; border-radius: 4px; }
+.menu-divider { height: 1px; background: var(--border); margin: 10px 0; }
+.menu-section-title {
+  font-family: 'Quicksand', sans-serif; font-weight: 700; font-size: 0.95rem;
+  color: var(--text); margin: 18px 0 2px;
+}
+.menu-group-title {
+  font-size: 0.55rem; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--muted); margin: 14px 0 4px;
+}
+.menu-games { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+.menu-game {
+  display: flex; align-items: center; gap: 9px; padding: 7px 6px; border-radius: 8px;
+  text-decoration: none; color: var(--text);
+}
+.menu-game:hover { background: var(--track); }
+.menu-game img {
+  width: 26px; height: 26px; border-radius: 6px; background: #fff;
+  object-fit: contain; flex-shrink: 0; border: 1px solid var(--border);
+}
+.menu-game-name {
+  font-size: 0.7rem; font-family: 'Quicksand', sans-serif; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -3333,5 +3386,115 @@ window.retryLearnLevel = retryLearnLevel;
     <div style="font-size:0.6rem;letter-spacing:3px;text-transform:uppercase;color:#999">day streak</div>
   </div>
 </div>
+
+<!-- ===== Nerdleverse menu (dynamic game list from shared JSON) ===== -->
+<div class="menu-overlay" id="menu-overlay"></div>
+<aside class="menu-panel" id="menu-panel" aria-label="Menu">
+  <div class="menu-head">
+    <a class="menu-brand" href="https://www.nerdlegame.com" aria-label="nerdle home"><span class="m-word">mathlete</span><span class="m-dot">.</span></a>
+    <button class="menu-close" aria-label="Close menu" onclick="closeMenu()">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+    </button>
+  </div>
+
+  <div class="menu-item" role="button" tabindex="0" onclick="showPage('history');closeMenu();"><span class="mi-ico">📊</span> Statistics</div>
+  <div class="menu-item" role="button" tabindex="0" onclick="shareMathlete();"><span class="mi-ico">🔗</span> Share</div>
+  <div class="menu-item" role="button" tabindex="0" onclick="toggleTheme();"><span class="mi-ico">🌗</span> Dark mode</div>
+
+  <div class="menu-divider"></div>
+
+  <a class="menu-item" href="https://www.nerdlegame.com"><span class="mi-ico"><img src="https://nerdlegame.com/logo192.png" width="20" height="20" alt=""></span> nerdle HQ</a>
+  <a class="menu-item" href="https://www.nerdlegame.com/privacy.html"><span class="mi-ico">🔒</span> Privacy policy</a>
+
+  <div class="menu-section-title">nerdleverse games</div>
+  <div id="menu-games-host"><div class="menu-group-title">Loading games…</div></div>
+</aside>
+
+<script>
+// ===== Nerdleverse menu: fetch the shared game list and render it =====
+(function(){
+  var GAMES_URL = 'https://www.nerdlegame.com/menu-config/nerdleverse-games.json';
+  var CACHE_KEY = 'nerdleverse-games-config';
+  var overlay, panel, host, gamesRendered = false;
+
+  function openMenu(){
+    if (!overlay) return;
+    overlay.classList.add('open'); panel.classList.add('open');
+    document.body.style.overflow = 'hidden';
+    if (!gamesRendered) loadGames();
+  }
+  function closeMenu(){
+    if (!overlay) return;
+    overlay.classList.remove('open'); panel.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  window.openMenu = openMenu;
+  window.closeMenu = closeMenu;
+
+  window.shareMathlete = function(){
+    var url = 'https://www.nerdlegame.com/mathlete';
+    var data = { title: 'Mathlete', text: 'Mental maths training by nerdle', url: url };
+    try {
+      if (navigator.share) { navigator.share(data).catch(function(){}); }
+      else if (navigator.clipboard) { navigator.clipboard.writeText(url); }
+      else { window.prompt('Copy this link:', url); }
+    } catch(e) {}
+    closeMenu();
+  };
+
+  function tile(g){
+    var a = document.createElement('a');
+    a.className = 'menu-game'; a.href = g.url;
+    var img = document.createElement('img');
+    img.src = g.img; img.alt = ''; img.loading = 'lazy';
+    img.onerror = function(){ this.style.visibility = 'hidden'; };
+    var name = document.createElement('span');
+    name.className = 'menu-game-name'; name.textContent = g.name;
+    a.appendChild(img); a.appendChild(name);
+    return a;
+  }
+
+  function renderGames(cfg){
+    if (!host || !cfg || !cfg.games) return;
+    host.innerHTML = '';
+    var byId = {};
+    cfg.games.forEach(function(g){ byId[g.id] = g; });
+    var groups = (cfg.groups && cfg.groups.length) ? cfg.groups : null;
+    if (groups){
+      groups.forEach(function(grp){
+        var games = (grp.games || []).map(function(id){ return byId[id]; }).filter(Boolean);
+        if (!games.length) return;
+        var t = document.createElement('div'); t.className = 'menu-group-title'; t.textContent = grp.title;
+        var grid = document.createElement('div'); grid.className = 'menu-games';
+        games.forEach(function(g){ grid.appendChild(tile(g)); });
+        host.appendChild(t); host.appendChild(grid);
+      });
+    } else {
+      var grid = document.createElement('div'); grid.className = 'menu-games';
+      cfg.games.forEach(function(g){ grid.appendChild(tile(g)); });
+      host.appendChild(grid);
+    }
+    gamesRendered = true;
+  }
+
+  function loadGames(){
+    try { var c = sessionStorage.getItem(CACHE_KEY); if (c) renderGames(JSON.parse(c)); } catch(e){}
+    fetch(GAMES_URL, { cache: 'no-cache' })
+      .then(function(r){ if (!r.ok) throw new Error('bad status'); return r.json(); })
+      .then(function(cfg){ try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(cfg)); } catch(e){} renderGames(cfg); })
+      .catch(function(){
+        if (!gamesRendered && host) {
+          host.innerHTML = '<a class="menu-item" href="https://www.nerdlegame.com">More nerdle games at nerdlegame.com →</a>';
+        }
+      });
+  }
+
+  overlay = document.getElementById('menu-overlay');
+  panel   = document.getElementById('menu-panel');
+  host    = document.getElementById('menu-games-host');
+  if (overlay) overlay.addEventListener('click', closeMenu);
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeMenu(); });
+})();
+</script>
 </body>
 </html>
