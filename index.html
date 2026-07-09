@@ -624,16 +624,15 @@ body { background: var(--bg); color: var(--text); }
   padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
   background: var(--track); border-top: 1px solid var(--border);
 }
-:root.kp-on body { padding-bottom: 220px; }
-.keypad-digits { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; width: 100%; max-width: 460px; }
-.keypad .key-del { width: 100%; max-width: 460px; }
+:root.kp-on body { padding-bottom: 160px; }
+.keypad-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; width: 100%; max-width: 480px; }
 .key {
-  height: 56px; border: none; border-radius: 10px; background: var(--surface); color: var(--text);
+  height: 54px; border: none; border-radius: 10px; background: var(--surface); color: var(--text);
   font-family: 'Roboto Mono', monospace; font-size: 1.5rem; font-weight: 700; cursor: pointer;
   box-shadow: 0 1px 2px rgba(0,0,0,0.18); -webkit-tap-highlight-color: transparent;
 }
 .key:active { background: var(--border); transform: translateY(1px); }
-.key-del { height: 48px; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+.key-del { grid-column: 6; grid-row: 1 / span 2; height: auto; font-size: 1.3rem; color: var(--muted); }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -3614,19 +3613,19 @@ window.retryLearnLevel = retryLearnLevel;
 
 <!-- Custom numeric keypad (touch only; replaces the OS keyboard so the ad stays visible) -->
 <div id="keypad" class="keypad" role="group" aria-label="Number pad">
-  <div class="keypad-digits">
+  <div class="keypad-grid">
     <button class="key" type="button" data-k="1">1</button>
     <button class="key" type="button" data-k="2">2</button>
     <button class="key" type="button" data-k="3">3</button>
     <button class="key" type="button" data-k="4">4</button>
     <button class="key" type="button" data-k="5">5</button>
+    <button class="key key-del" type="button" data-k="del" aria-label="Delete">&#9003;</button>
     <button class="key" type="button" data-k="6">6</button>
     <button class="key" type="button" data-k="7">7</button>
     <button class="key" type="button" data-k="8">8</button>
     <button class="key" type="button" data-k="9">9</button>
     <button class="key" type="button" data-k="0">0</button>
   </div>
-  <button class="key key-del" type="button" data-k="del" aria-label="Delete">&#9003;&nbsp; delete</button>
 </div>
 
 <script>
