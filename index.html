@@ -1140,7 +1140,8 @@ function endGame() {
     mulA:[parseInt(document.getElementById('mul-a1').value),parseInt(document.getElementById('mul-a2').value)],
     mulB:[parseInt(document.getElementById('mul-b1').value),parseInt(document.getElementById('mul-b2').value)]
   };
-  if (isDefaultSettings({ ranges: curRanges, ops: Array.from(selectedOps) })) {
+  // Zero-score games: no username prompt, submit, leaderboard entry or DB push.
+  if (score > 0 && isDefaultSettings({ ranges: curRanges, ops: Array.from(selectedOps) })) {
     showScoreModal(score, duration);
   }
 
