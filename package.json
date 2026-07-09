@@ -1,0 +1,12 @@
+{
+  "name": "mathlete",
+  "homepage": "https://nerdlegame.com/mathlete",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mathlete — mental maths training by nerdle",
+  "scripts": {
+    "deploySub": "aws s3 sync . s3://nerdle-serverless-app/mathlete --acl public-read --exclude \".git/*\" --exclude \".claude/*\" --exclude \"node_modules/*\" --exclude \"*.md\" --exclude \"package.json\" --exclude \"package-lock.json\"",
+    "invalidateSub": "aws cloudfront create-invalidation --distribution-id E2GV7CU2G3KWL8 --paths \"/mathlete/*\" \"/mathlete\"",
+    "deploy": "npm run deploySub && npm run invalidateSub"
+  }
+}
