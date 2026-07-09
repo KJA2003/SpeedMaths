@@ -277,6 +277,27 @@ function saveData(d) {
   try { localStorage.setItem('arith_v3', JSON.stringify(d)); } catch(e) {}
 }
 
+// ── Stable identifiers for ML logging ──────────────────────────────
+// device_id : persistent per-device anonymous id (survives across sessions)
+// session_id: fresh per game (minted in startGame), groups a game's answers
+// user_id   : nerdle account id, populated once login is wired (cached from
+//             the LBL profile). Null until then.
+var currentSessionId = null;
+function newId(prefix) {
+  try { if (window.crypto && crypto.randomUUID) return crypto.randomUUID(); } catch(e) {}
+  return prefix + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+}
+function getDeviceId() {
+  try {
+    var id = localStorage.getItem('mathlete_device_id');
+    if (!id) { id = newId('dev'); localStorage.setItem('mathlete_device_id', id); }
+    return id;
+  } catch(e) { return null; }
+}
+function getUserId() {
+  try { return localStorage.getItem('mathlete_user_id') || null; } catch(e) { return null; }
+}
+
 // ================================================================
 // NAV
 // ================================================================
@@ -478,6 +499,7 @@ function stopPaceTicker() {
 function startGame() {
   score = 0; troubleCount = 0; answeredQuestions = [];
   timeLeft = duration;
+  currentSessionId = newId('ses');  // one session per game, for ML log grouping
   for (var k in opData) { opData[k].total = 0; opData[k].count = 0; }
 
   document.getElementById('config-screen').style.display = 'none';
@@ -2538,6 +2560,10 @@ function getSkillReport() {
 // ================================================================
 function logQuestion(op, a, b, correct, elapsedMs, gamePos, timeLeft, dur) {
   var payload = {
+    device_id:     getDeviceId(),   // persistent anonymous per-device id
+    session_id:    currentSessionId, // this game's id (groups its answers)
+    user_id:       getUserId(),      // nerdle account id when logged in, else null
+    client_ts:     Date.now(),       // client timestamp (epoch ms)
     op:            op,
     a:             a,
     b:             b,
