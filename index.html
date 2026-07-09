@@ -3246,11 +3246,10 @@ window.retryLearnLevel = retryLearnLevel;
 
 <!-- PLAY -->
 <div class="page active" id="page-play">
-  <div id="config-screen" style="width:100%">
-  <!-- Intro / demo box (inside config-screen so it hides during play) -->
+  <!-- Intro box — persists above config + game; only the illustration hides during play -->
   <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:20px 18px;margin-bottom:20px;position:relative">
     <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
-    <div style="font-size:1.15rem;font-weight:700;margin-bottom:12px;color:var(--text)">Welcome to Mathlete</div>
+    <div style="margin-bottom:14px;text-align:center;color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
     <div class="intro-demo" id="intro-demo" aria-hidden="true">
       <div class="demo-q" id="demo-q">7 &times; 8 =</div>
       <div class="demo-a" id="demo-a"><span id="demo-typed"></span><span class="demo-caret"></span></div>
@@ -3258,6 +3257,7 @@ window.retryLearnLevel = retryLearnLevel;
     <div style="font-size:0.74rem;color:var(--muted);line-height:1.6;text-align:center;margin-top:12px">Type your answer. It will auto-submit when correct.</div>
   </div>
 
+  <div id="config-screen" style="width:100%">
     <div class="section-label">Operations</div>
     <div class="field-hint">Select operations to include</div>
     <div class="op-chips">
@@ -3612,48 +3612,51 @@ window.retryLearnLevel = retryLearnLevel;
     { q: '63 − 27 =', a: '36' },
     { q: '9 × 7 =',   a: '63' }
   ];
-  var idx = 0, timer = null;
+  var idx = 0, timer = null, staticDone = false;
   function el(id){ return document.getElementById(id); }
   function sched(fn, ms){ if (timer) clearTimeout(timer); timer = setTimeout(fn, ms); }
+  // True only on the Play landing (config screen visible) — not during a game or on other tabs.
   function active(){
     if (document.hidden) return false;
     var banner = el('welcome-banner');
-    if (!banner || banner.style.display === 'none') return false;
+    if (!banner || banner.style.display === 'none') return false;  // box dismissed / hidden
     var play = el('page-play');
     if (!play || !play.classList.contains('active')) return false;
     var cfg = el('config-screen');
     if (cfg && cfg.style.display === 'none') return false;  // a game is in progress
     return true;
   }
+  // Show/hide only the illustration; the welcome text + caption stay put.
+  function setVisible(v){ var box = el('intro-demo'); if (box) box.style.display = v ? 'flex' : 'none'; }
+
   function runQuestion(item, done){
     var q = el('demo-q'), t = el('demo-typed'), a = el('demo-a');
     if (!q || !t || !a) { sched(done, 600); return; }
     q.textContent = item.q; t.textContent = ''; a.classList.remove('demo-correct');
     var digits = item.a.split(''), i = 0;
     function typeNext(){
-      if (!active()) { sched(function(){ runQuestion(item, done); }, 500); return; }
+      if (!active()) { sched(loop, 400); return; }  // bail to loop, which hides the illustration
       if (i < digits.length) { t.textContent += digits[i]; i++; sched(typeNext, 150); }
-      else { a.classList.add('demo-correct'); sched(done, 750); }
+      else { a.classList.add('demo-correct'); sched(done, 800); }
     }
     sched(typeNext, 550);
   }
   function loop(){
-    if (!active()) { sched(loop, 500); return; }
+    if (!active()) { setVisible(false); sched(loop, 400); return; }
+    setVisible(true);
+    if (reduced) {  // static solved example, no motion; just keep managing visibility
+      var q = el('demo-q'), t = el('demo-typed'), a = el('demo-a'), box = el('intro-demo');
+      if (!staticDone && q && t) {
+        q.textContent = QS[0].q; t.textContent = QS[0].a;
+        if (a) a.classList.add('demo-correct');
+        if (box) box.classList.add('demo-static');
+        staticDone = true;
+      }
+      sched(loop, 1000); return;
+    }
     runQuestion(QS[idx], function(){ idx = (idx + 1) % QS.length; sched(loop, 550); });
   }
-  function init(){
-    if (!el('intro-demo')) return;
-    if (reduced) {
-      var q = el('demo-q'), t = el('demo-typed'), box = el('intro-demo'), a = el('demo-a');
-      if (q) q.textContent = QS[0].q;
-      if (t) t.textContent = QS[0].a;
-      if (box) box.classList.add('demo-static');
-      if (a) a.classList.add('demo-correct');
-      return;
-    }
-    loop();
-  }
-  init();
+  if (el('intro-demo')) loop();
 })();
 </script>
 
