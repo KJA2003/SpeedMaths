@@ -186,16 +186,6 @@ Values worth knowing, all currently in `index.html` / `package.json`:
 
 ---
 
-## Roadmap (nerdle integration, in progress)
-
-- [x] Rebrand to the nerdle palette + dark mode + wordmark
-- [x] Enriched ML logging (device / session / user / timestamp)
-- [x] S3 / CloudFront deploy scripts
-- [ ] Nerdle hamburger menu (links to nerdle HQ, other games, privacy policy)
-- [ ] Ads (lngtd) — side-rail + in-content slots
-- [ ] Nerdle account login (LeaderboardLe OAuth) + cross-device data backup
-- [ ] Learn-map dark-mode polish, favicon/app icons, final mobile pass
-
 ## Credits
 
 Game by KJA (SpeedMaths). Nerdle integration and launch prep for
