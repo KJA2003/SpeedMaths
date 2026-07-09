@@ -552,36 +552,42 @@ body { background: var(--bg); color: var(--text); }
 @keyframes demoBlink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .demo-caret { animation: none; } }
 
-/* ===== Ad slots (same units as maffdoku: side rails on desktop, M_1 on mobile) ===== */
+/* ===== Layout shell: centered content flanked by flex ad rails (maffdoku model) ===== */
+.app-shell { display: flex; flex-direction: row; justify-content: center; width: 100%; }
+.app-main  { width: 520px; max-width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+/* Side rails are flex regions that size to the injected ad — no fixed width, so ads never crop */
 .desktopSideAd { display: none; }
 .mobile-ad { display: none; }
-@media (min-width: 1040px) {
+@media (min-width: 1000px) {
   .desktopSideAd {
-    display: block; position: fixed; top: 84px; width: 160px; min-height: 600px; z-index: 6;
-    overflow: hidden;  /* clip any oversized injected ad so it can't spill over the page */
+    display: flex; flex: 3; overflow: hidden; align-items: flex-start; min-width: 0; padding-top: 90px;
   }
-  .desktopSideAd.left  { left: 16px; }
-  .desktopSideAd.right { right: 16px; }
+  #nerdlegame_D_x1.desktopSideAd { justify-content: flex-start; margin: 0 2rem 0 1rem; }
+  #nerdlegame_D_x2.desktopSideAd { justify-content: flex-end;   margin: 0 1rem 0 2rem; }
+  /* keep the injected ad pinned to the outer edge of each rail */
+  #nerdlegame_D_x1 iframe, #nerdlegame_D_x1 > div { margin-left: 0 !important; margin-right: auto !important; }
+  #nerdlegame_D_x2 iframe, #nerdlegame_D_x2 > div { margin-left: auto !important; margin-right: 0 !important; }
 }
-@media (max-width: 1039px) {
+@media (max-width: 999px) {
   .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 22px 20px 0; text-align: center; }
 }
-#nerdlegame_D_x1 iframe, #nerdlegame_D_x2 iframe, #nerdlegame_M_1 iframe { margin: auto !important; }
+#nerdlegame_M_1 iframe { margin: auto !important; }
 
-/* Local-only ad-slot preview: dashed boxes marking where ads sit (real ads replace them in production) */
-@media (min-width: 1040px) {
+/* Local-only ad-slot preview: dashed markers where ads sit (real ads replace them in production) */
+@media (min-width: 1000px) {
   :root.ad-preview .desktopSideAd {
-    display: flex; align-items: center; justify-content: center;
-    border: 2px dashed var(--accent); border-radius: 8px; overflow: hidden;
-    color: var(--accent); font-family: 'Roboto Mono', monospace; font-size: 0.6rem; letter-spacing: 1px; text-align: center;
+    min-height: 600px; align-items: center; justify-content: center;
+    border: 2px dashed var(--accent); border-radius: 8px;
+    color: var(--accent); font: 700 0.6rem 'Roboto Mono', monospace; letter-spacing: 1px;
   }
-  :root.ad-preview .desktopSideAd::before { content: 'AD SLOT\A 160 × 600'; white-space: pre; }
+  :root.ad-preview #nerdlegame_D_x1::before, :root.ad-preview #nerdlegame_D_x2::before { content: 'AD RAIL'; }
 }
-@media (max-width: 1039px) {
+@media (max-width: 999px) {
   :root.ad-preview .mobile-ad {
     display: flex; align-items: center; justify-content: center; min-height: 90px; margin-top: 22px;
     border: 2px dashed var(--accent); border-radius: 8px;
-    color: var(--accent); font-family: 'Roboto Mono', monospace; font-size: 0.6rem; letter-spacing: 1px; text-align: center;
+    color: var(--accent); font: 700 0.6rem 'Roboto Mono', monospace; letter-spacing: 1px;
   }
   :root.ad-preview .mobile-ad::before { content: 'AD SLOT · mobile'; }
 }
@@ -3220,9 +3226,10 @@ window.retryLearnLevel = retryLearnLevel;
 </head>
 <body>
 
-<!-- Desktop side-rail ads (lngtd fills these; hidden below 1040px) -->
-<div class="desktopSideAd left"><div id="nerdlegame_D_x1"></div></div>
-<div class="desktopSideAd right"><div id="nerdlegame_D_x2"></div></div>
+<div class="app-shell">
+<!-- Desktop left side-rail ad (flex rail sizes to the injected ad — no fixed width) -->
+<div id="nerdlegame_D_x1" class="desktopSideAd"></div>
+<div class="app-main">
 
 <header class="site-header">
   <button class="icon-btn" aria-label="Menu" onclick="openMenu()">
@@ -3553,6 +3560,12 @@ window.retryLearnLevel = retryLearnLevel;
     <button class="btn-outline" style="width:100%" onclick="goToMap()">Back to levels</button>
   </div>
 </div>
+
+</div><!-- .app-main -->
+<!-- Desktop right side-rail ad -->
+<div id="nerdlegame_D_x2" class="desktopSideAd"></div>
+</div><!-- .app-shell -->
+
 <!-- Mobile bottom ad slot (lngtd fills this; hidden on desktop) -->
 <div class="mobile-ad"><div id="nerdlegame_M_1"></div></div>
 
