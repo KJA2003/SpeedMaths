@@ -515,6 +515,10 @@ body { background: var(--bg); color: var(--text); }
 
 /* Operation selector — segmented toggle chips: off = faded, on = crisp accent */
 .field-hint { font-size: 0.64rem; color: var(--muted); margin-bottom: 10px; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; width: 100%; margin-bottom: 8px; }
+.section-head .section-label { margin-bottom: 0; width: auto; }
+.section-head .field-hint { margin-bottom: 0; text-align: right; }
+#config-screen .toggle-row { margin-bottom: 8px; }
 .op-chips { display: flex; flex-wrap: nowrap; gap: 6px; margin-bottom: 14px; width: 100%; }
 .op-chip {
   flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
@@ -588,7 +592,7 @@ body { background: var(--bg); color: var(--text); }
   #nerdlegame_D_x2 iframe, #nerdlegame_D_x2 > div { margin-left: auto !important; margin-right: 0 !important; }
 }
 @media (max-width: 999px) {
-  .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 22px 20px 8px; text-align: center; }
+  .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 10px 20px 6px; text-align: center; }
 }
 #nerdlegame_M_1 iframe { margin: auto !important; }
 
@@ -3313,8 +3317,10 @@ window.retryLearnLevel = retryLearnLevel;
 
   <div id="config-screen" style="width:100%">
     <button class="start-btn" onclick="startGame()" style="margin-bottom:26px">Start</button>
-    <div class="section-label">Operations</div>
-    <div class="field-hint">Select operations to include</div>
+    <div class="section-head">
+      <div class="section-label">Operations</div>
+      <div class="field-hint">Select operations to include</div>
+    </div>
     <div class="op-chips">
       <button class="op-chip active" data-op="addition"       onclick="toggleOp(event,this)"><span class="op-sym">+</span>Add</button>
       <button class="op-chip active" data-op="subtraction"    onclick="toggleOp(event,this)"><span class="op-sym">&minus;</span>Sub</button>
@@ -3350,12 +3356,8 @@ window.retryLearnLevel = retryLearnLevel;
       <button class="dur-btn" data-sec="300">5min</button>
       <button class="dur-btn" data-sec="600">10min</button>
     </div>
-    <div class="section-label">Options</div>
     <label class="toggle-row" for="pace-toggle">
-      <div>
-        <div class="toggle-row-label">Pace indicator</div>
-        <div class="toggle-row-sub">Live bar showing your speed vs average</div>
-      </div>
+      <div class="toggle-row-label">Pace indicator</div>
       <div class="toggle-switch">
         <input type="checkbox" id="pace-toggle" checked onchange="setPaceVisible(this.checked)">
         <div class="toggle-slider"></div>
@@ -3674,7 +3676,14 @@ window.retryLearnLevel = retryLearnLevel;
   });
   document.addEventListener('focusout', function(e){
     var t = e.target;
-    if (t && t.classList && t.classList.contains('answer-input')) { hideTimer = setTimeout(hidePad, 150); }
+    if (t && t.classList && t.classList.contains('answer-input')) {
+      // Keep the keypad up if the user just tapped away; only hide once the input
+      // is actually gone (game ended / tab changed).
+      hideTimer = setTimeout(function(){
+        if (document.querySelector('.answer-input:focus')) return;  // focus moved to another answer input
+        if (!t.offsetParent) hidePad();                             // input no longer visible -> hide
+      }, 200);
+    }
   });
 
   // Key taps must not steal focus from the input (keeps its caret + focus alive).
