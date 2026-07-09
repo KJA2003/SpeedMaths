@@ -354,9 +354,10 @@ body { background: var(--bg); color: var(--text); }
 .answer-input { border-bottom-color: var(--accent); color: var(--text); caret-color: var(--accent); }
 
 /* Active / selected states = accent */
+.duration-row { flex-wrap: nowrap; }
 .dur-btn {
-  padding: 8px 14px; border-radius: 999px; background: var(--surface);
-  border: 1px solid var(--border); color: var(--muted); font-size: 0.76rem;
+  flex: 1; text-align: center; padding: 8px 4px; border-radius: 999px; background: var(--surface);
+  border: 1px solid var(--border); color: var(--muted); font-size: 0.74rem; white-space: nowrap;
   transition: color 0.12s, border-color 0.12s;
 }
 .dur-btn:hover { border-color: var(--muted); }
@@ -510,20 +511,19 @@ body { background: var(--bg); color: var(--text); }
 .history-table th { font-size: 0.6rem; }
 .no-history, .no-patterns { font-size: 0.72rem; }
 
-/* Operation selector — settings-style toggle chips */
+/* Operation selector — segmented toggle chips: off = faded, on = crisp accent */
 .field-hint { font-size: 0.64rem; color: var(--muted); margin-bottom: 10px; }
-.op-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; width: 100%; }
+.op-chips { display: flex; flex-wrap: nowrap; gap: 6px; margin-bottom: 14px; width: 100%; }
 .op-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 8px 13px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 999px; font-family: 'Roboto Mono', monospace; font-size: 0.76rem;
-  color: var(--muted); cursor: pointer; transition: color 0.12s, border-color 0.12s;
+  flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  padding: 9px 4px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 999px; font-family: 'Roboto Mono', monospace; font-size: 0.74rem;
+  color: var(--muted); cursor: pointer; opacity: 0.5; white-space: nowrap;
+  transition: color 0.12s, border-color 0.12s, opacity 0.12s;
 }
-.op-chip .op-sym { font-weight: 700; font-size: 0.9rem; }
-.op-chip .op-check { display: none; font-size: 0.68rem; }
-.op-chip:hover { border-color: var(--muted); }
-.op-chip.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
-.op-chip.active .op-check { display: inline; }
+.op-chip .op-sym { font-weight: 700; font-size: 0.92rem; }
+.op-chip:hover { border-color: var(--muted); opacity: 0.8; }
+.op-chip.active { border-color: var(--accent); color: var(--accent); opacity: 1; font-weight: 700; }
 .ranges-toggle {
   background: none; border: none; color: var(--muted); cursor: pointer;
   font-family: 'Roboto Mono', monospace; font-size: 0.62rem; letter-spacing: 1.5px;
@@ -3270,17 +3270,17 @@ window.retryLearnLevel = retryLearnLevel;
       <div class="demo-q" id="demo-q">7 &times; 8 =</div>
       <div class="demo-a" id="demo-a"><span id="demo-typed"></span><span class="demo-caret"></span></div>
     </div>
-    <div style="font-size:0.74rem;color:var(--muted);line-height:1.6;text-align:center;margin-top:12px">Type your answer. It will auto-submit when correct.</div>
+    <div style="font-size:0.64rem;color:var(--text);line-height:1.5;text-align:center;margin-top:10px;white-space:nowrap">Type your answer — auto-submits when correct.</div>
   </div>
 
   <div id="config-screen" style="width:100%">
     <div class="section-label">Operations</div>
     <div class="field-hint">Select operations to include</div>
     <div class="op-chips">
-      <button class="op-chip active" data-op="addition"       onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">+</span>Add</button>
-      <button class="op-chip active" data-op="subtraction"    onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">&minus;</span>Subtract</button>
-      <button class="op-chip active" data-op="multiplication" onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">&times;</span>Multiply</button>
-      <button class="op-chip active" data-op="division"       onclick="toggleOp(event,this)"><span class="op-check">&#10003;</span><span class="op-sym">&divide;</span>Divide</button>
+      <button class="op-chip active" data-op="addition"       onclick="toggleOp(event,this)"><span class="op-sym">+</span>Add</button>
+      <button class="op-chip active" data-op="subtraction"    onclick="toggleOp(event,this)"><span class="op-sym">&minus;</span>Sub</button>
+      <button class="op-chip active" data-op="multiplication" onclick="toggleOp(event,this)"><span class="op-sym">&times;</span>Mult</button>
+      <button class="op-chip active" data-op="division"       onclick="toggleOp(event,this)"><span class="op-sym">&divide;</span>Div</button>
     </div>
     <button class="ranges-toggle" id="ranges-toggle" onclick="toggleRanges()" aria-expanded="false">Customise ranges &#9662;</button>
     <div class="ranges-panel" id="ranges-panel" style="display:none">
@@ -3306,10 +3306,10 @@ window.retryLearnLevel = retryLearnLevel;
     <div class="section-label">Duration</div>
     <div class="duration-row">
       <button class="dur-btn" data-sec="30">30s</button>
-      <button class="dur-btn" data-sec="60">1 min</button>
-      <button class="dur-btn active" data-sec="120">2 min</button>
-      <button class="dur-btn" data-sec="300">5 min</button>
-      <button class="dur-btn" data-sec="600">10 min</button>
+      <button class="dur-btn" data-sec="60">1min</button>
+      <button class="dur-btn active" data-sec="120">2min</button>
+      <button class="dur-btn" data-sec="300">5min</button>
+      <button class="dur-btn" data-sec="600">10min</button>
     </div>
     <button class="start-btn" onclick="startGame()">Start</button>
 
