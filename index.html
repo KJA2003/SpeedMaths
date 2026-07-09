@@ -455,6 +455,7 @@ body { background: var(--bg); color: var(--text); }
 .menu-game img {
   width: 26px; height: 26px; border-radius: 6px; background: #fff;
   object-fit: contain; flex-shrink: 0; border: 1px solid var(--border);
+  padding: 2px; box-sizing: border-box;
 }
 .menu-game-name {
   font-size: 0.7rem; font-family: 'Quicksand', sans-serif; font-weight: 600;
@@ -675,12 +676,20 @@ body { background: var(--bg); color: var(--text); }
     var t = localStorage.getItem('mathlete_theme');
     if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
   } catch(e){}
+  window.updateThemeLabel = function(){
+    var lbl = document.getElementById('theme-toggle-label');
+    if (!lbl) return;
+    var cur = document.documentElement.getAttribute('data-theme');
+    if (!cur) cur = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    lbl.textContent = (cur === 'dark') ? 'Light mode' : 'Dark mode';
+  };
   window.toggleTheme = function(){
     var cur = document.documentElement.getAttribute('data-theme');
     if (!cur) cur = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
     var next = cur === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', next);
     try { localStorage.setItem('mathlete_theme', next); } catch(e){}
+    window.updateThemeLabel();
   };
   // Real drawer is wired in the menu step; stub avoids an undefined-handler error.
   window.openMenu = window.openMenu || function(){};
@@ -1092,6 +1101,9 @@ function endGame() {
   var total = score + troubleCount;
   var acc = total === 0 ? 100 : Math.round(score / total * 100);
 
+  // Don't record zero-score games in local history — no point cluttering the
+  // graphs / making someone feel bad over a game they didn't really play.
+  if (score > 0) {
   data.games.push({
     ts: Date.now(), duration: duration, score: score, trouble: troubleCount,
     acc: acc, avgTime: Math.round(avgTime), ops: Array.from(selectedOps),
@@ -1108,6 +1120,7 @@ function endGame() {
     },
     answered: answeredQuestions.map(function(q) { return { op: q.op, a: q.a, b: q.b }; })
   });
+  }
 
   for (var ti = 0; ti < troublePool.length; ti++) {
     var tq = troublePool[ti];
@@ -3771,7 +3784,7 @@ window.retryLearnLevel = retryLearnLevel;
   <div class="menu-grid">
     <div class="menu-tile" role="button" tabindex="0" onclick="showPage('history');closeMenu();"><span class="mi-ico">📊</span> Statistics</div>
     <div class="menu-tile" role="button" tabindex="0" onclick="shareMathlete();"><span class="mi-ico">🔗</span> Share</div>
-    <div class="menu-tile" role="button" tabindex="0" onclick="toggleTheme();"><span class="mi-ico">🌗</span> Dark mode</div>
+    <div class="menu-tile" role="button" tabindex="0" onclick="toggleTheme();"><span class="mi-ico">🌗</span> <span id="theme-toggle-label">Dark mode</span></div>
     <a class="menu-tile" href="https://www.nerdlegame.com"><span class="mi-ico"><img src="https://nerdlegame.com/logo192.png" width="18" height="18" alt=""></span> nerdle HQ</a>
   </div>
 
@@ -3876,6 +3889,7 @@ window.retryLearnLevel = retryLearnLevel;
     if (!overlay) return;
     overlay.classList.add('open'); panel.classList.add('open');
     document.body.style.overflow = 'hidden';
+    if (window.updateThemeLabel) window.updateThemeLabel();
     if (!gamesRendered) loadGames();
   }
   function closeMenu(){
