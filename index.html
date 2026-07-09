@@ -2233,6 +2233,12 @@ function renderLearnMap() {
   if (!container) return;
   container.innerHTML = '';
 
+  // Theme-aware colours so the map works in dark mode
+  var cText = themeColor('--text', '#111'), cSurface = themeColor('--surface', '#fff'),
+      cTrack = themeColor('--track', '#f0f0eb'), cBorder = themeColor('--border', '#ddd'),
+      cFaint = themeColor('--faint', '#bbb'), cMuted = themeColor('--muted', '#888'),
+      cAccent = themeColor('--accent', '#820458'), cAccentText = themeColor('--accent-contrast', '#fff');
+
   // Show levels in a zigzag path, from bottom to top (latest at top)
   var unlocked = ld.unlocked;
   var show = Math.min(unlocked + 3, 10000);
@@ -2275,11 +2281,11 @@ function renderLearnMap() {
       var x1 = parseFloat(leftPct);
       var x2 = parseFloat(nextLeftPct);
       var midX = (x1 + x2) / 2;
-      line.style.cssText = 'position:absolute;top:' + (topPx + 36) + 'px;left:' + leftPct + ';width:2px;height:' + (rowH - 36) + 'px;background:' + (locked ? '#e8e8e3' : '#ddd') + ';transform:translateX(-50%);';
+      line.style.cssText = 'position:absolute;top:' + (topPx + 36) + 'px;left:' + leftPct + ';width:2px;height:' + (rowH - 36) + 'px;background:' + (locked ? cTrack : cBorder) + ';transform:translateX(-50%);';
       if (x1 !== x2) {
         // Diagonal: use a rotated element
         var angle = Math.atan2(rowH - 36, (x2 - x1) / 100 * 480) * 180 / Math.PI; // approx
-        line.style.cssText = 'position:absolute;top:' + (topPx + 32) + 'px;left:' + Math.min(x1,x2) + '%;width:' + Math.abs(x2-x1) + '%;height:2px;background:' + (locked ? '#e8e8e3' : '#ddd') + ';';
+        line.style.cssText = 'position:absolute;top:' + (topPx + 32) + 'px;left:' + Math.min(x1,x2) + '%;width:' + Math.abs(x2-x1) + '%;height:2px;background:' + (locked ? cTrack : cBorder) + ';';
       }
       mapEl.appendChild(line);
     }
@@ -2287,12 +2293,12 @@ function renderLearnMap() {
     // Island circle
     var island = document.createElement('div');
     var size = isCurrent ? 64 : 56;
-    var bg = locked ? '#f0f0eb' : isCurrent ? '#111' : '#fff';
-    var border = locked ? '2px solid #e0e0da' : isCurrent ? '2px solid #111' : '2px solid #111';
+    var bg = locked ? cTrack : isCurrent ? cAccent : cSurface;
+    var border = locked ? '2px solid ' + cBorder : isCurrent ? '2px solid ' + cAccent : '2px solid ' + cText;
     island.style.cssText = 'position:absolute;top:' + topPx + 'px;left:' + leftPct + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + bg + ';border:' + border + ';transform:translateX(-50%);display:flex;align-items:center;justify-content:center;cursor:' + (locked ? 'default' : 'pointer') + ';flex-direction:column;';
 
     var numEl = document.createElement('div');
-    numEl.style.cssText = 'font-family:"Roboto Mono",monospace;font-size:' + (isCurrent ? '0.75' : '0.65') + 'rem;font-weight:700;color:' + (locked ? '#bbb' : isCurrent ? '#fff' : '#111') + ';line-height:1;';
+    numEl.style.cssText = 'font-family:"Roboto Mono",monospace;font-size:' + (isCurrent ? '0.75' : '0.65') + 'rem;font-weight:700;color:' + (locked ? cFaint : isCurrent ? cAccentText : cText) + ';line-height:1;';
     numEl.textContent = n;
     island.appendChild(numEl);
 
@@ -2315,7 +2321,7 @@ function renderLearnMap() {
         'top:' + (topPx + size/2 + sy) + 'px;' +
         'transform:translate(calc(-50% + ' + sx + 'px), -50%);' +
         'font-size:1.6rem;line-height:1;' +
-        'color:' + (earned ? '#111' : (locked ? 'transparent' : '#ddd')) + ';' +
+        'color:' + (earned ? cText : (locked ? 'transparent' : cFaint)) + ';' +
         'pointer-events:none;';
       starDiv.textContent = earned ? '★' : '☆';
       if (shown || locked) mapEl.appendChild(starDiv);
@@ -2339,7 +2345,7 @@ function renderLearnMap() {
     var label = document.createElement('div');
     var labelLeft = parseFloat(leftPct) > 50 ? (parseFloat(leftPct) - 38) + '%' : (parseFloat(leftPct) + 32) + '%';
     var textAlign = parseFloat(leftPct) > 50 ? 'right' : 'left';
-    label.style.cssText = 'position:absolute;top:' + (topPx + 8) + 'px;left:' + labelLeft + ';font-size:0.52rem;color:' + (locked ? '#ccc' : '#888') + ';max-width:90px;line-height:1.4;text-align:' + textAlign + ';font-family:"Roboto Mono",monospace;';
+    label.style.cssText = 'position:absolute;top:' + (topPx + 8) + 'px;left:' + labelLeft + ';font-size:0.52rem;color:' + (locked ? cFaint : cMuted) + ';max-width:90px;line-height:1.4;text-align:' + textAlign + ';font-family:"Roboto Mono",monospace;';
     label.textContent = lv.desc;
     mapEl.appendChild(label);
   });
