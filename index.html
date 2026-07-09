@@ -7,7 +7,8 @@
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-  gtag('config', 'G-VQLZ9L5D0H');
+  gtag('config', 'G-VQLZ9L5D0H');   // original (nephew's) GA4
+  gtag('config', 'G-K54TD1JY16');   // nerdle site GA4 — dual-tracking
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -752,6 +753,10 @@ function getDeviceId() {
 function getUserId() {
   try { return localStorage.getItem('mathlete_user_id') || null; } catch(e) { return null; }
 }
+// GA4 event helper (fires to both configured properties via gtag); safe no-op if gtag absent.
+function gaEvent(name, params) {
+  try { if (window.gtag) window.gtag('event', name, params || {}); } catch(e) {}
+}
 
 // ================================================================
 // NAV
@@ -992,6 +997,7 @@ function startGame() {
   document.getElementById('config-screen').style.display = 'none';
   document.getElementById('game-screen').style.display = 'flex';
   document.documentElement.classList.add('playing');  // focus mode: hide the tab bar
+  gaEvent('game_start', { mode: 'play', duration: duration, ops: Array.from(selectedOps).sort().join(','), op_count: selectedOps.size });
   document.getElementById('score-display').textContent = '0';
   document.getElementById('timer-display').textContent = formatTime(timeLeft);
 
@@ -1129,6 +1135,7 @@ function endGame() {
     data.trouble[tq.question].lastSeen = Date.now();
   }
   saveData(data);
+  gaEvent('game_complete', { mode: 'play', score: score, duration: duration, accuracy: acc, avg_time_ms: Math.round(avgTime), ops: Array.from(selectedOps).sort().join(',') });
   var _newStreak = updateStreak();
   if (_newStreak) _pendingStreakN = _newStreak;
 
@@ -1726,6 +1733,7 @@ function showNextPractice() {
     document.getElementById('practice-game').style.display = 'none';
     document.getElementById('practice-done').style.display = 'block';
     document.getElementById('prac-done-score').textContent = _pracRight + '/' + _pracTotal;
+    gaEvent('game_complete', { mode: 'practice', correct: _pracRight, total: _pracTotal });
     return;
   }
   var q = unseen[0]; q._seen = true;
@@ -1764,11 +1772,13 @@ function endPracticeSession() {
   document.getElementById('practice-game').style.display = 'none';
   document.getElementById('practice-done').style.display = 'block';
   document.getElementById('prac-done-score').textContent = _pracRight + '/' + _pracTotal;
+  gaEvent('game_complete', { mode: 'practice', correct: _pracRight, total: _pracTotal, ended_early: true });
 }
 
 function _runPractice(items) {
   _practiceQueue = items.map(function(q) { return Object.assign({}, q, { _cleared: false, _failed: false, _seen: false }); });
   _pracRight = 0; _pracTotal = 0; _practiceQueue._current = null;
+  gaEvent('game_start', { mode: 'practice', question_count: items.length });
   document.getElementById('practice-config').style.display = 'none';
   document.getElementById('practice-game').style.display = 'flex';
   document.getElementById('practice-done').style.display = 'none';
@@ -2496,6 +2506,7 @@ function startLearnLevel(n) {
   document.getElementById('learn-result-view').style.display = 'none';
   document.getElementById('learn-info-view').style.display = 'none';
   document.getElementById('learn-game-view').style.display = 'flex';
+  gaEvent('game_start', { mode: 'learn', level: n });
   document.getElementById('learn-level-label').textContent = 'Level ' + n;
   renderLearnStarMarkers(_learnLevel);
   var tb = document.getElementById('learn-time-bar');
@@ -2688,6 +2699,8 @@ function endLearnLevel() {
   if (_learnScore >= lv.star3) stars = 3;
   else if (_learnScore >= lv.star2) stars = 2;
   else if (_learnScore >= lv.target) stars = 1;
+
+  gaEvent('game_complete', { mode: 'learn', level: lv.n, score: _learnScore, stars: stars, passed: passed });
 
   // Save progress
   var ld = loadLearnData();
