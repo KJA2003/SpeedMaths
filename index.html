@@ -560,6 +560,13 @@ body { background: var(--bg); color: var(--text); }
 .intro-demo.demo-static .demo-caret { display: none; }
 @keyframes demoBlink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .demo-caret { animation: none; } }
+/* Phones: question + answer on ONE line to keep Start above the fold */
+@media (max-width: 600px) {
+  .intro-demo { flex-direction: row; min-height: 0; padding: 12px; gap: 8px; }
+  .intro-demo .demo-q, .intro-demo .demo-a { font-size: 1.4rem; }
+  .intro-demo .demo-a { min-height: 0; }
+  .intro-demo .demo-caret { height: 1.2rem; }
+}
 
 /* ===== Layout shell: centered content flanked by flex ad rails (maffdoku model) ===== */
 .app-shell { display: flex; flex-direction: row; justify-content: center; width: 100%; }
