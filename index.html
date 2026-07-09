@@ -14,17 +14,27 @@
 <title>Mathlete — mental maths training by nerdle</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
 
-<!-- Ads: same lngtd config as maffdoku; page identifier = mathlete -->
-<script defer async src="https://lngtd.com/nerdlegame.js"></script>
-<script>window.nerdleRealtimeConfig = { page: 'mathlete', sampleRate: 0.3 };</script>
+<!-- Ads: same lngtd config as maffdoku; page identifier = mathlete.
+     Loaded in production only — running live auctions locally injects ad
+     wrappers that can overlay the page and steal clicks. -->
 <script>
+  window.nerdleRealtimeConfig = { page: 'mathlete', sampleRate: 0.3 };
   // window.subdomain is the per-game identifier lngtd + nerdle-realtime.js read
   // for by-game revenue rollups. Mathlete is a single game, so it's constant.
   var subdomain = 'mathlete';
   window.subdomain = subdomain;
   try { localStorage.setItem('gameType', 'mathlete'); } catch(e) {}
+  (function(){
+    var isProd = /(^|\.)nerdlegame\.com$/.test(location.hostname);
+    if (!isProd) return; // no ad scripts locally / in dev
+    var lng = document.createElement('script');
+    lng.defer = true; lng.async = true; lng.src = 'https://lngtd.com/nerdlegame.js';
+    document.head.appendChild(lng);
+    var rt = document.createElement('script');
+    rt.src = '/mathlete/scripts/nerdle-realtime.js';
+    document.head.appendChild(rt);
+  })();
 </script>
-<script src="/mathlete/scripts/nerdle-realtime.js"></script>
 
 <style>
 /* ===== Nerdle brand palette + light/dark theming ===== */
@@ -548,6 +558,7 @@ body { background: var(--bg); color: var(--text); }
 @media (min-width: 1040px) {
   .desktopSideAd {
     display: block; position: fixed; top: 84px; width: 160px; min-height: 600px; z-index: 6;
+    overflow: hidden;  /* clip any oversized injected ad so it can't spill over the page */
   }
   .desktopSideAd.left  { right: calc(50% + 280px); }
   .desktopSideAd.right { left:  calc(50% + 280px); }
