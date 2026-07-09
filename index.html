@@ -536,6 +536,10 @@ body { background: var(--bg); color: var(--text); }
   text-transform: uppercase; padding: 2px 0; margin-bottom: 20px;
 }
 .ranges-toggle:hover { color: var(--text); }
+.config-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; margin-bottom: 20px; }
+.config-row .ranges-toggle { margin-bottom: 0; }
+.pace-toggle-inline { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.pace-toggle-inline .pt-label { font-family: 'Roboto Mono', monospace; font-size: 0.62rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
 .ranges-panel { width: 100%; margin: -8px 0 22px; flex-direction: column; gap: 14px; }
 .range-group-label { font-size: 0.58rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
 
@@ -3322,9 +3326,9 @@ window.retryLearnLevel = retryLearnLevel;
 <!-- PLAY -->
 <div class="page active" id="page-play">
   <!-- Intro box — persists above config + game; only the illustration hides during play -->
-  <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:20px 18px;margin-bottom:20px;position:relative">
-    <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
-    <div id="welcome-title" style="margin-bottom:14px;text-align:center;color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
+  <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:12px 16px;margin-bottom:10px;position:relative">
+    <button onclick="dismissWelcome()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
+    <div id="welcome-title" style="margin-bottom:8px;text-align:center;color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
     <div class="intro-demo" id="intro-demo" aria-hidden="true">
       <div class="demo-q" id="demo-q">7 &times; 8 =</div>
       <div class="demo-a" id="demo-a"><span id="demo-typed"></span><span class="demo-caret"></span></div>
@@ -3344,7 +3348,16 @@ window.retryLearnLevel = retryLearnLevel;
       <button class="op-chip active" data-op="multiplication" onclick="toggleOp(event,this)"><span class="op-sym">&times;</span>Mult</button>
       <button class="op-chip active" data-op="division"       onclick="toggleOp(event,this)"><span class="op-sym">&divide;</span>Div</button>
     </div>
-    <button class="ranges-toggle" id="ranges-toggle" onclick="toggleRanges()" aria-expanded="false">Customise ranges &#9662;</button>
+    <div class="config-row">
+      <button class="ranges-toggle" id="ranges-toggle" onclick="toggleRanges()" aria-expanded="false">Customise ranges &#9662;</button>
+      <label class="pace-toggle-inline" for="pace-toggle">
+        <span class="pt-label">Pace indicator</span>
+        <span class="toggle-switch">
+          <input type="checkbox" id="pace-toggle" checked onchange="setPaceVisible(this.checked)">
+          <div class="toggle-slider"></div>
+        </span>
+      </label>
+    </div>
     <div class="ranges-panel" id="ranges-panel" style="display:none">
       <div class="range-group">
         <div class="range-group-label">Addition &amp; subtraction</div>
@@ -3373,13 +3386,6 @@ window.retryLearnLevel = retryLearnLevel;
       <button class="dur-btn" data-sec="300">5min</button>
       <button class="dur-btn" data-sec="600">10min</button>
     </div>
-    <label class="toggle-row" for="pace-toggle">
-      <div class="toggle-row-label">Pace indicator</div>
-      <div class="toggle-switch">
-        <input type="checkbox" id="pace-toggle" checked onchange="setPaceVisible(this.checked)">
-        <div class="toggle-slider"></div>
-      </div>
-    </label>
   </div>
 
   <div id="game-screen" style="display:none;width:100%;flex-direction:column;align-items:center;">
