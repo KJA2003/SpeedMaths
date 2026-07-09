@@ -560,8 +560,8 @@ body { background: var(--bg); color: var(--text); }
     display: block; position: fixed; top: 84px; width: 160px; min-height: 600px; z-index: 6;
     overflow: hidden;  /* clip any oversized injected ad so it can't spill over the page */
   }
-  .desktopSideAd.left  { right: calc(50% + 280px); }
-  .desktopSideAd.right { left:  calc(50% + 280px); }
+  .desktopSideAd.left  { left: 16px; }
+  .desktopSideAd.right { right: 16px; }
 }
 @media (max-width: 1039px) {
   .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 22px 20px 0; text-align: center; }
@@ -3246,7 +3246,8 @@ window.retryLearnLevel = retryLearnLevel;
 
 <!-- PLAY -->
 <div class="page active" id="page-play">
-  <!-- First-time welcome banner -->
+  <div id="config-screen" style="width:100%">
+  <!-- Intro / demo box (inside config-screen so it hides during play) -->
   <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:20px 18px;margin-bottom:20px;position:relative">
     <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
     <div style="font-size:1.15rem;font-weight:700;margin-bottom:12px;color:var(--text)">Welcome to Mathlete</div>
@@ -3257,7 +3258,6 @@ window.retryLearnLevel = retryLearnLevel;
     <div style="font-size:0.74rem;color:var(--muted);line-height:1.6;text-align:center;margin-top:12px">Type your answer. It will auto-submit when correct.</div>
   </div>
 
-  <div id="config-screen" style="width:100%">
     <div class="section-label">Operations</div>
     <div class="field-hint">Select operations to include</div>
     <div class="op-chips">
