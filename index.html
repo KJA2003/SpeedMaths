@@ -579,7 +579,7 @@ body { background: var(--bg); color: var(--text); }
   #nerdlegame_D_x2 iframe, #nerdlegame_D_x2 > div { margin-left: auto !important; margin-right: 0 !important; }
 }
 @media (max-width: 999px) {
-  .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 22px 20px 0; text-align: center; }
+  .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 8px 20px 14px; text-align: center; }
 }
 #nerdlegame_M_1 iframe { margin: auto !important; }
 
@@ -600,6 +600,25 @@ body { background: var(--bg); color: var(--text); }
   }
   :root.ad-preview .mobile-ad::before { content: 'AD SLOT · mobile'; }
 }
+
+/* ===== Custom numeric keypad (touch devices; .kp-on toggled by JS on input focus) ===== */
+.keypad { display: none; }
+:root.kp-on .keypad {
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: var(--track); border-top: 1px solid var(--border);
+}
+:root.kp-on body { padding-bottom: 220px; }
+.keypad-digits { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; width: 100%; max-width: 460px; }
+.keypad .key-del { width: 100%; max-width: 460px; }
+.key {
+  height: 56px; border: none; border-radius: 10px; background: var(--surface); color: var(--text);
+  font-family: 'Roboto Mono', monospace; font-size: 1.5rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18); -webkit-tap-highlight-color: transparent;
+}
+.key:active { background: var(--border); transform: translateY(1px); }
+.key-del { height: 48px; font-size: 0.85rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -3260,12 +3279,15 @@ window.retryLearnLevel = retryLearnLevel;
   <button class="nav-btn" data-page="learn">Learn</button>
 </nav>
 
+<!-- Mobile ad slot — placed at the top, far from the bottom keypad to avoid mis-taps -->
+<div class="mobile-ad"><div id="nerdlegame_M_1"></div></div>
+
 <!-- PLAY -->
 <div class="page active" id="page-play">
   <!-- Intro box — persists above config + game; only the illustration hides during play -->
   <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:20px 18px;margin-bottom:20px;position:relative">
     <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
-    <div style="margin-bottom:14px;text-align:center;color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
+    <div id="welcome-title" style="margin-bottom:14px;text-align:center;color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
     <div class="intro-demo" id="intro-demo" aria-hidden="true">
       <div class="demo-q" id="demo-q">7 &times; 8 =</div>
       <div class="demo-a" id="demo-a"><span id="demo-typed"></span><span class="demo-caret"></span></div>
@@ -3575,8 +3597,74 @@ window.retryLearnLevel = retryLearnLevel;
 <div id="nerdlegame_D_x2" class="desktopSideAd"></div>
 </div><!-- .app-shell -->
 
-<!-- Mobile bottom ad slot (lngtd fills this; hidden on desktop) -->
-<div class="mobile-ad"><div id="nerdlegame_M_1"></div></div>
+<!-- Custom numeric keypad (touch only; replaces the OS keyboard so the ad stays visible) -->
+<div id="keypad" class="keypad" role="group" aria-label="Number pad">
+  <div class="keypad-digits">
+    <button class="key" type="button" data-k="1">1</button>
+    <button class="key" type="button" data-k="2">2</button>
+    <button class="key" type="button" data-k="3">3</button>
+    <button class="key" type="button" data-k="4">4</button>
+    <button class="key" type="button" data-k="5">5</button>
+    <button class="key" type="button" data-k="6">6</button>
+    <button class="key" type="button" data-k="7">7</button>
+    <button class="key" type="button" data-k="8">8</button>
+    <button class="key" type="button" data-k="9">9</button>
+    <button class="key" type="button" data-k="0">0</button>
+  </div>
+  <button class="key key-del" type="button" data-k="del" aria-label="Delete">&#9003;&nbsp; delete</button>
+</div>
+
+<script>
+// ===== Custom numeric keypad: drives the focused answer input on touch devices =====
+(function(){
+  var isTouch = false;
+  try { isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0); } catch(e){}
+  if (!isTouch) return;  // desktop uses the physical keyboard — no keypad, native input behaviour
+
+  var pad = document.getElementById('keypad');
+  if (!pad) return;
+  var root = document.documentElement;
+
+  // Suppress the OS keyboard on the answer inputs; the keypad drives them instead.
+  var inputs = document.querySelectorAll('.answer-input');
+  for (var i = 0; i < inputs.length; i++) inputs[i].setAttribute('inputmode', 'none');
+
+  var activeInput = null, hideTimer = null;
+  function showPad(){ if (hideTimer) { clearTimeout(hideTimer); hideTimer = null; } root.classList.add('kp-on'); }
+  function hidePad(){ root.classList.remove('kp-on'); }
+
+  document.addEventListener('focusin', function(e){
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('answer-input')) { activeInput = t; showPad(); }
+  });
+  document.addEventListener('focusout', function(e){
+    var t = e.target;
+    if (t && t.classList && t.classList.contains('answer-input')) { hideTimer = setTimeout(hidePad, 150); }
+  });
+
+  // Key taps must not steal focus from the input (keeps its caret + focus alive).
+  pad.addEventListener('pointerdown', function(e){ e.preventDefault(); });
+  pad.addEventListener('mousedown',  function(e){ e.preventDefault(); });
+
+  pad.addEventListener('click', function(e){
+    var btn = e.target && e.target.closest ? e.target.closest('.key') : null;
+    if (!btn) return;
+    var inp = activeInput || document.querySelector('.answer-input:focus');
+    if (!inp) return;
+    var k = btn.getAttribute('data-k');
+    if (k === 'del') {
+      // Mark trouble exactly like a physical Backspace, then remove the last char.
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+      inp.value = inp.value.slice(0, -1);
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    } else {
+      inp.value += k;
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    if (document.activeElement !== inp) { try { inp.focus({ preventScroll: true }); } catch(err) { inp.focus(); } }
+  });
+})();
+</script>
 
 <div id="streak-overlay">
   <div class="streak-popup">
@@ -3648,8 +3736,12 @@ window.retryLearnLevel = retryLearnLevel;
     if (cfg && cfg.style.display === 'none') return false;  // a game is in progress
     return true;
   }
-  // Show/hide only the illustration; the welcome text + caption stay put.
-  function setVisible(v){ var box = el('intro-demo'); if (box) box.style.display = v ? 'flex' : 'none'; }
+  // On the landing show the title + illustration; during a game hide both and
+  // keep only the "auto-submit" caption.
+  function setVisible(v){
+    var box = el('intro-demo'); if (box) box.style.display = v ? 'flex' : 'none';
+    var title = el('welcome-title'); if (title) title.style.display = v ? '' : 'none';
+  }
 
   function runQuestion(item, done){
     var q = el('demo-q'), t = el('demo-typed'), a = el('demo-a');
