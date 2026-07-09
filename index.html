@@ -335,8 +335,14 @@ body { background: var(--bg); color: var(--text); }
 .answer-input { border-bottom-color: var(--accent); color: var(--text); caret-color: var(--accent); }
 
 /* Active / selected states = accent */
-.dur-btn { color: var(--muted); }
-.dur-btn.active, .hist-btn.active { border-color: var(--accent); color: var(--accent); }
+.dur-btn {
+  padding: 8px 14px; border-radius: 999px; background: var(--surface);
+  border: 1px solid var(--border); color: var(--muted); font-size: 0.76rem;
+  transition: color 0.12s, border-color 0.12s;
+}
+.dur-btn:hover { border-color: var(--muted); }
+.dur-btn.active { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.hist-btn.active { border-color: var(--accent); color: var(--accent); }
 .practice-tag { border-color: var(--border); color: var(--faint); }
 .practice-tag.tag-exact { border-color: var(--accent); color: var(--accent); }
 .practice-tag.tag-similar { border-color: var(--muted); color: var(--muted); }
