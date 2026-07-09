@@ -11,9 +11,31 @@
 </script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Alkaliner</title>
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<title>Mathlete — mental maths training by nerdle</title>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+/* ===== Nerdle brand palette + light/dark theming ===== */
+:root{
+  --bg:#f2f2f0; --surface:#ffffff; --text:#161803; --muted:#6f7370;
+  --faint:#a6a8a2; --border:#dcdcd6; --track:#eeeee8;
+  --accent:#820458; --accent-hover:#6a0247; --accent-contrast:#ffffff;
+  --green:#398874; --red:#c85a3c; --brand:#820458;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1b2130; --surface:#252d3d; --text:#dfe1e3; --muted:#9aa0ab;
+    --faint:#6b7280; --border:#39424f; --track:#2c3444;
+    --accent:#c24d92; --accent-hover:#d466a6; --accent-contrast:#ffffff;
+    --green:#4db699; --red:#e07d63; --brand:#e987be;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1b2130; --surface:#252d3d; --text:#dfe1e3; --muted:#9aa0ab;
+  --faint:#6b7280; --border:#39424f; --track:#2c3444;
+  --accent:#c24d92; --accent-hover:#d466a6; --accent-contrast:#ffffff;
+  --green:#4db699; --red:#e07d63; --brand:#e987be;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
   background: #f5f5f0; color: #111; font-family: 'Roboto Mono', monospace;
@@ -237,7 +259,128 @@ canvas { width: 100%; display: block; }
 }
 .num-exit  { animation: numExit  0.35s ease-in forwards; }
 .num-enter { animation: numEnter 0.35s ease-out 0.2s forwards; opacity: 0; }
+
+/* ============================================================
+   MATHLETE THEME LAYER
+   Re-skins the design above onto the nerdle palette + dark mode.
+   Purple (--accent) = brand & interactive state; ink (--text) = content & data.
+   ============================================================ */
+body { background: var(--bg); color: var(--text); }
+
+/* Brand header */
+.site-header {
+  width: 100%; max-width: 520px; display: flex; align-items: center;
+  gap: 10px; padding: 14px 20px 10px;
+}
+.brand-mark {
+  display: flex; align-items: baseline; gap: 1px; text-decoration: none;
+  font-family: 'Quicksand', sans-serif; font-weight: 700;
+  font-size: 1.5rem; letter-spacing: -0.5px; line-height: 1;
+}
+.brand-mark .m-word { color: var(--brand); }
+.brand-mark .m-dot { color: var(--faint); font-family: 'Times New Roman', serif; }
+.brand-sub {
+  font-family: 'Roboto Mono', monospace; font-size: 0.5rem; letter-spacing: 2px;
+  text-transform: uppercase; color: var(--muted); margin-left: 2px; align-self: center;
+}
+.header-spacer { flex: 1; }
+.icon-btn {
+  background: none; border: none; cursor: pointer; padding: 4px; color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+}
+.icon-btn svg { display: block; }
+
+/* Nav */
+.nav { background: var(--bg); border-bottom-color: var(--border); margin-bottom: 28px; }
+.nav-btn { color: var(--faint); }
+.nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Surfaces & cards */
+.op-row, .dur-btn, .toggle-row, .stat, .chart-wrap, .graph-wrap,
+.pattern-card, .lb-row, .hist-btn { background: var(--surface); border-color: var(--border); }
+.op-check { border-color: var(--border); }
+.op-row.active { border-color: var(--accent); }
+.op-row.active .op-check { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); }
+
+/* Text tiers */
+.section-label, .range-inline, .toggle-row-sub, .hud, .result-label, .result-sub,
+.chart-title, .stat-key, .graph-title, .pattern-card-count, .practice-meta,
+.history-table th, .pattern-card-detail, .chart-time-label { color: var(--muted); }
+.op-label, .hud-val, .stat-val, .practice-meta-val, .pattern-card-title,
+.pattern-template, .toggle-row-label, .lb-rank.top3 { color: var(--text); }
+.chart-count, .chart-no-data, .no-history, .no-patterns, .lb-rank, .lb-date,
+.pace-label, .pace-number.no-avg { color: var(--faint); }
+.hist-btn { color: var(--muted); }
+
+/* Inputs */
+.range-inline input { border-bottom-color: var(--border); color: var(--text); }
+.range-inline input:focus { border-bottom-color: var(--accent); }
+.answer-input { border-bottom-color: var(--accent); color: var(--text); caret-color: var(--accent); }
+
+/* Active / selected states = accent */
+.dur-btn { color: var(--muted); }
+.dur-btn.active, .hist-btn.active { border-color: var(--accent); color: var(--accent); }
+.practice-tag { border-color: var(--border); color: var(--faint); }
+.practice-tag.tag-exact { border-color: var(--accent); color: var(--accent); }
+.practice-tag.tag-similar { border-color: var(--muted); color: var(--muted); }
+
+/* Primary CTA + brand accents */
+.start-btn { background: var(--accent); color: var(--accent-contrast); }
+.start-btn:hover { background: var(--accent-hover); }
+.toggle-slider { background: var(--border); }
+.toggle-slider::before { background: var(--surface); }
+.toggle-switch input:checked + .toggle-slider { background: var(--accent); }
+.timer-bar-wrap { background: var(--border); }
+.timer-bar { background: var(--accent); }
+
+/* Secondary buttons = neutral ink */
+.btn-outline, .pattern-practice-btn { border-color: var(--text); color: var(--text); }
+.btn-outline:hover, .pattern-practice-btn:hover { background: var(--text); color: var(--bg); }
+.btn-outline:disabled { border-color: var(--faint); color: var(--faint); }
+.btn-outline:disabled:hover { background: transparent; color: var(--faint); }
+.stop-btn { color: var(--faint); }
+.stop-btn:hover { color: var(--muted); }
+
+/* Data viz = ink (kept monochrome for a clean trainer look) */
+.bar-track, .pace-bar-wrap { background: var(--track); }
+.pace-bar-wrap::after { background: var(--border); }
+.bar-fill { background: var(--text); }
+.bar-fill.slowest { background: var(--faint); }
+.history-table td { border-bottom-color: var(--track); }
+.pattern-ex-chip { background: var(--track); border-color: var(--border); color: var(--muted); }
+
+/* Functional colours */
+.pace-number { color: var(--muted); }
+.pace-fill.behind { background: var(--red); }
+.pace-number.behind { color: var(--red); }
+.pace-fill.ahead { background: var(--green); }
+.pace-number.ahead, .lb-name.you { color: var(--green); }
+.streak-popup { background: var(--surface); border-color: var(--accent); }
+
+/* Modals & inline-styled banners (override inline background:white / #ddd for dark mode) */
+#name-modal > div, #skip-modal > div, .theme-surface { background: var(--surface) !important; color: var(--text); }
+#alltime-banner, #welcome-banner, #learn-info-view > div, #learn-map-view,
+[id^="learn-"] .theme-surface { background: var(--surface) !important; border-color: var(--border) !important; }
+#name-modal input, #skip-modal input { color: var(--text) !important; border-bottom-color: var(--accent) !important; }
 </style>
+<script>
+// Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
+(function(){
+  try {
+    var t = localStorage.getItem('mathlete_theme');
+    if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t);
+  } catch(e){}
+  window.toggleTheme = function(){
+    var cur = document.documentElement.getAttribute('data-theme');
+    if (!cur) cur = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+    var next = cur === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('mathlete_theme', next); } catch(e){}
+  };
+  // Real drawer is wired in the menu step; stub avoids an undefined-handler error.
+  window.openMenu = window.openMenu || function(){};
+})();
+</script>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 (function() {
@@ -791,9 +934,16 @@ function renderHistory() {
     tr.innerHTML = '<td>' + (data.games.length - i) + '</td><td>' + fmtDate(g.ts) + '</td><td>' + formatTime(g.duration) + '</td><td><strong>' + g.score + '</strong></td><td>' + g.acc + '%</td><td>' + (g.avgTime/1000).toFixed(1) + 's</td><td><button onclick="deleteGame(' + gameIdx + ')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:0.9rem;padding:2px 4px;line-height:1" title="Delete">&times;</button></td>';
     tbody.appendChild(tr);
   });
-  drawGraph('graph-score', games, function(g) { return Math.round(g.score * 120 / g.duration); }, '#111');
-  drawGraph('graph-acc',   games, function(g) { return g.acc; },   '#3a9e6f');
-  drawGraph('graph-time',  games, function(g) { return +(g.avgTime/1000).toFixed(2); }, '#e05a3a');
+  drawGraph('graph-score', games, function(g) { return Math.round(g.score * 120 / g.duration); }, themeColor('--text', '#111'));
+  drawGraph('graph-acc',   games, function(g) { return g.acc; },   themeColor('--green', '#398874'));
+  drawGraph('graph-time',  games, function(g) { return +(g.avgTime/1000).toFixed(2); }, themeColor('--red', '#c85a3c'));
+}
+
+function themeColor(name, fallback) {
+  try {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  } catch(e) { return fallback; }
 }
 
 function drawGraph(canvasId, games, getValue, color) {
@@ -803,10 +953,12 @@ function drawGraph(canvasId, games, getValue, color) {
   canvas.width = W * dpr; canvas.height = H * dpr;
   canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
   var ctx = canvas.getContext('2d'); ctx.scale(dpr, dpr); ctx.clearRect(0,0,W,H);
+  var gridColor = themeColor('--border', '#eee');
+  var labelColor = themeColor('--faint', '#bbb');
   var vals = games.map(getValue);
   if (!vals.length) return;
   if (vals.length < 2) {
-    ctx.fillStyle = '#ddd'; ctx.fillRect(0, H/2-1, W, 2);
+    ctx.fillStyle = gridColor; ctx.fillRect(0, H/2-1, W, 2);
     ctx.beginPath(); ctx.arc(W/2, H/2, 4, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill(); return;
   }
   var minV = Math.min.apply(null, vals) * 0.9;
@@ -815,7 +967,7 @@ function drawGraph(canvasId, games, getValue, color) {
   var gW = W - pad.l - pad.r, gH = H - pad.t - pad.b;
   function px(i) { return pad.l + (i / (vals.length - 1)) * gW; }
   function py(v) { return pad.t + gH - ((v - minV) / (maxV - minV)) * gH; }
-  ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+  ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
   [0, 0.5, 1].forEach(function(t) { var y = pad.t + gH * (1-t); ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+gW, y); ctx.stroke(); });
   ctx.beginPath();
   vals.forEach(function(v, i) { if (i === 0) ctx.moveTo(px(i), py(v)); else ctx.lineTo(px(i), py(v)); });
@@ -825,7 +977,7 @@ function drawGraph(canvasId, games, getValue, color) {
   ctx.lineTo(px(vals.length-1), pad.t+gH); ctx.lineTo(px(0), pad.t+gH); ctx.closePath();
   ctx.fillStyle = color + '18'; ctx.fill();
   vals.forEach(function(v, i) { ctx.beginPath(); ctx.arc(px(i), py(v), 3, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill(); });
-  ctx.fillStyle = '#bbb'; ctx.font = '9px Roboto Mono, monospace'; ctx.textAlign = 'right';
+  ctx.fillStyle = labelColor; ctx.font = '9px Roboto Mono, monospace'; ctx.textAlign = 'right';
   ctx.fillText(maxV.toFixed(maxV < 10 ? 1 : 0), pad.l - 4, pad.t + 5);
   ctx.fillText(minV.toFixed(minV < 10 ? 1 : 0), pad.l - 4, pad.t + gH + 1);
 }
@@ -2812,6 +2964,20 @@ window.retryLearnLevel = retryLearnLevel;
 </script>
 </head>
 <body>
+
+<header class="site-header">
+  <a class="brand-mark" href="https://www.nerdlegame.com" aria-label="Mathlete by nerdle">
+    <span class="m-word">mathlete</span><span class="m-dot">.</span>
+  </a>
+  <span class="brand-sub">brain&nbsp;training</span>
+  <span class="header-spacer"></span>
+  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" onclick="toggleTheme()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+  </button>
+  <button class="icon-btn" aria-label="Menu" onclick="openMenu()">
+    <svg width="22" height="16" viewBox="0 0 24 17" fill="currentColor" aria-hidden="true"><path d="M0 16.07V13.4h24v2.67H0zM0 9.4V6.74h24V9.4H0zM0 2.74V.07h24v2.67H0z"></path></svg>
+  </button>
+</header>
 
 <nav class="nav">
   <button class="nav-btn active" data-page="play">Play</button>
