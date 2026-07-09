@@ -1928,7 +1928,7 @@ function loadLeaderboard() {
     }
     rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 10);
     var list = document.getElementById('lb-list');
-    var myName = localStorage.getItem('arith_name') || '';
+    var myName = localStorage.getItem('mathlete_username') || '';
     if (!rows.length) { document.getElementById('lb-empty').style.display = 'block'; return; }
     rows.forEach(function(row, i) {
       var el = document.createElement('div'); el.className = 'lb-row';
@@ -1954,6 +1954,32 @@ function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+// ── Public leaderboard handle: short prefix + random suffix, set once, editable ──
+function getUsername(){ try { return localStorage.getItem('mathlete_username') || ''; } catch(e){ return ''; } }
+function makeUsername(handle){
+  var suffix = Math.random().toString(36).substring(2, 8);
+  while (suffix.length < 6) suffix += '0';
+  return handle.toUpperCase() + '_' + suffix.slice(0, 6);
+}
+function setUnameMode(mode){
+  var c = document.getElementById('uname-create'), e = document.getElementById('uname-existing');
+  if (c) c.style.display = (mode === 'create') ? 'block' : 'none';
+  if (e) e.style.display = (mode === 'existing') ? 'block' : 'none';
+}
+function updateUnamePreview(){
+  var el = document.getElementById('handle-input'); if (!el) return;
+  var h = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  if (el.value !== h) el.value = h;   // enforce format as they type
+  var p = document.getElementById('uname-preview');
+  if (p) p.textContent = h ? (h + '_xxxxxx') : '';
+}
+function editUsername(){
+  setUnameMode('create');
+  var h = document.getElementById('handle-input'); if (h) h.value = '';
+  updateUnamePreview();
+  if (h) h.focus();
+}
+
 function showScoreModal(score, duration) {
   // Lock score/duration in a closure — not readable or writable from console
   _submitFn = function(name) {
@@ -1972,11 +1998,11 @@ function showScoreModal(score, duration) {
   document.getElementById('modal-score').textContent = score;
   var durLabel = { 30:'30 seconds', 60:'1 minute', 120:'2 minutes', 300:'5 minutes', 600:'10 minutes' };
   document.getElementById('modal-sub').textContent = (durLabel[duration] || duration + 's') + ' game';
-  var saved = localStorage.getItem('arith_name') || '';
-  document.getElementById('name-input').value = saved;
-  var modal = document.getElementById('name-modal');
-  modal.style.display = 'flex';
-  setTimeout(function() { document.getElementById('name-input').focus(); }, 50);
+  var uname = getUsername();
+  if (uname) { setUnameMode('existing'); document.getElementById('uname-display').textContent = uname; }
+  else { setUnameMode('create'); document.getElementById('handle-input').value = ''; updateUnamePreview(); }
+  document.getElementById('name-modal').style.display = 'flex';
+  if (!uname) setTimeout(function() { var h = document.getElementById('handle-input'); if (h) h.focus(); }, 50);
 }
 
 function closeModal() {
@@ -1994,17 +2020,25 @@ function containsBlockedWord(s) {
 }
 
 function submitScore() {
-  var name = document.getElementById('name-input').value.trim();
-  if (!name) { document.getElementById('name-input').focus(); return; }
-  if (containsBlockedWord(name)) {
-    document.getElementById('name-input').style.borderBottomColor = '#e05a3a';
-    document.getElementById('name-input').placeholder = 'Please choose an appropriate name';
-    document.getElementById('name-input').value = '';
-    return;
-  }
   if (!_submitFn) { closeModal(); return; }
-  localStorage.setItem('arith_name', name);
-  _submitFn(name).then(function() {
+  var uname = getUsername();
+  var createEl = document.getElementById('uname-create');
+  var creating = !createEl || createEl.style.display !== 'none';
+  if (creating) {
+    var hi = document.getElementById('handle-input');
+    var handle = hi.value.trim();
+    if (!/^[A-Za-z0-9]{1,5}$/.test(handle)) {
+      hi.style.borderBottomColor = 'var(--red)'; hi.placeholder = '1–5 letters or numbers'; return;
+    }
+    if (containsBlockedWord(handle)) {
+      hi.style.borderBottomColor = 'var(--red)'; hi.value = ''; hi.placeholder = 'Choose a different handle';
+      updateUnamePreview(); return;
+    }
+    uname = makeUsername(handle);
+    try { localStorage.setItem('mathlete_username', uname); } catch(e) {}
+  }
+  if (!uname) { closeModal(); return; }
+  _submitFn(uname).then(function() {
     _submitFn = null;
     closeModal();
   }).catch(function() {
@@ -2017,6 +2051,8 @@ function submitScore() {
 window.setLbWindow = setLbWindow;
 window.setLbDur = setLbDur;
 window.submitScore = submitScore;
+window.updateUnamePreview = updateUnamePreview;
+window.editUsername = editUsername;
 window.closeModal = closeModal;
 window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
@@ -2749,7 +2785,7 @@ function loadPlayLeaderboard() {
       return;
     }
     rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 5);
-    var myName = localStorage.getItem('arith_name') || '';
+    var myName = localStorage.getItem('mathlete_username') || '';
     rows.forEach(function(row, i) {
       var el = document.createElement('div');
       el.className = 'lb-row';
@@ -3308,6 +3344,8 @@ window.closeInlinePractice = closeInlinePractice;
 window.setLbWindow = setLbWindow;
 window.setLbDur = setLbDur;
 window.submitScore = submitScore;
+window.updateUnamePreview = updateUnamePreview;
+window.editUsername = editUsername;
 window.closeModal = closeModal;
 window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
@@ -3586,14 +3624,27 @@ window.retryLearnLevel = retryLearnLevel;
 
 <!-- NAME MODAL -->
 <div id="name-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center">
-  <div style="background:white;padding:32px;max-width:320px;width:90%;text-align:center">
-    <div style="font-size:0.6rem;letter-spacing:3px;text-transform:uppercase;color:#999;margin-bottom:16px">Submit your score</div>
-    <div style="font-size:2.5rem;font-weight:700;margin-bottom:8px" id="modal-score"></div>
-    <div style="font-size:0.65rem;color:#999;margin-bottom:20px" id="modal-sub"></div>
-    <input id="name-input" type="text" maxlength="20" placeholder="Your name"
-      style="width:100%;border:none;border-bottom:2px solid #111;font-family:'Roboto Mono',monospace;font-size:1rem;text-align:center;padding:8px 0;outline:none;background:transparent;margin-bottom:20px">
-    <button onclick="submitScore()" style="width:100%;padding:12px;background:#111;color:white;border:none;font-family:'Roboto Mono',monospace;font-size:0.8rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-bottom:8px">Submit</button>
-    <button onclick="closeModal()" style="width:100%;padding:10px;background:transparent;border:1px solid #ddd;font-family:'Roboto Mono',monospace;font-size:0.7rem;cursor:pointer;color:#999">Skip</button>
+  <div style="background:var(--surface);padding:32px;max-width:320px;width:90%;text-align:center;border-radius:4px">
+    <div style="font-size:0.6rem;letter-spacing:3px;text-transform:uppercase;color:var(--muted);margin-bottom:16px">Submit your score</div>
+    <div style="font-size:2.5rem;font-weight:700;margin-bottom:8px;color:var(--text)" id="modal-score"></div>
+    <div style="font-size:0.65rem;color:var(--muted);margin-bottom:20px" id="modal-sub"></div>
+
+    <div id="uname-create">
+      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:8px">Choose a handle (1–5 letters/numbers)</div>
+      <input id="handle-input" type="text" maxlength="5" placeholder="e.g. SKY" autocomplete="off" spellcheck="false" oninput="updateUnamePreview()"
+        style="width:100%;border:none;border-bottom:2px solid var(--accent);font-family:'Roboto Mono',monospace;font-size:1.3rem;font-weight:700;letter-spacing:3px;text-align:center;text-transform:uppercase;padding:8px 0;outline:none;background:transparent;color:var(--text)">
+      <div id="uname-preview" style="font-family:'Roboto Mono',monospace;font-size:0.72rem;color:var(--muted);margin:8px 0 18px;min-height:1em"></div>
+      <button onclick="submitScore()" style="width:100%;padding:12px;background:var(--accent);color:var(--accent-contrast);border:none;font-family:'Roboto Mono',monospace;font-size:0.8rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-bottom:8px">Create &amp; submit</button>
+    </div>
+
+    <div id="uname-existing" style="display:none">
+      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:6px">Submitting as</div>
+      <div id="uname-display" style="font-family:'Roboto Mono',monospace;font-size:1.1rem;font-weight:700;color:var(--accent);margin-bottom:18px"></div>
+      <button onclick="submitScore()" style="width:100%;padding:12px;background:var(--accent);color:var(--accent-contrast);border:none;font-family:'Roboto Mono',monospace;font-size:0.8rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-bottom:8px">Submit to leaderboard</button>
+      <button onclick="editUsername()" style="width:100%;padding:8px;background:transparent;border:none;font-family:'Roboto Mono',monospace;font-size:0.6rem;letter-spacing:1px;text-transform:uppercase;cursor:pointer;color:var(--muted);margin-bottom:8px">Change handle</button>
+    </div>
+
+    <button onclick="closeModal()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);font-family:'Roboto Mono',monospace;font-size:0.7rem;cursor:pointer;color:var(--muted)">Skip</button>
   </div>
 </div>
 
