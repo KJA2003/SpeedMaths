@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-VQLZ9L5D0H"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+  gtag('config', 'G-VQLZ9L5D0H');
+</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Alkaliner</title>
@@ -24,6 +32,7 @@ body {
   border-bottom: 2px solid transparent; margin-bottom: -1px;
 }
 .nav-btn.active { color: #111; border-bottom-color: #111; }
+.nav-btn.nav-locked { opacity: 0.3; cursor: default; pointer-events: none; }
 
 /* PAGES */
 .page { display: none; flex-direction: column; align-items: center; width: 100%; max-width: 520px; padding: 0 20px; }
@@ -180,16 +189,89 @@ canvas { width: 100%; display: block; }
 .lb-score { font-size:1rem; font-weight:700; flex-shrink:0; }
 .lb-date { font-size:0.55rem; color:#bbb; flex-shrink:0; }
 #learn-island-map::-webkit-scrollbar { display: none; }
+
+/* Streak animation overlay */
+#streak-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  opacity: 0; transition: opacity 0.4s ease;
+}
+#streak-overlay.visible { opacity: 1; }
+.streak-popup {
+  background: white; border: 2px solid #111;
+  padding: 28px 40px; text-align: center;
+  animation: streakPop 0.4s cubic-bezier(0.16,1,0.3,1);
+}
+@keyframes streakPop {
+  from { transform: scale(0.85); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
+}
+.streak-flame { font-size: 3rem; line-height: 1; margin-bottom: 8px; animation: flamePulse 0.7s ease infinite alternate; }
+@keyframes flamePulse {
+  from { transform: scale(1); }
+  to   { transform: scale(1.15); }
+}
+/* Number slot */
+.streak-num-slot {
+  position: relative; height: 3.2rem; overflow: hidden; margin-bottom: 4px;
+}
+.streak-num-inner {
+  display: flex; flex-direction: column;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.streak-num-item {
+  height: 3.2rem; line-height: 3.2rem;
+  font-size: 2.5rem; font-weight: 700; letter-spacing: -1px;
+  flex-shrink: 0;
+}
+/* Exit: old number slides down 28px and fades out mid-air */
+@keyframes numExit {
+  0%   { transform: translateY(0);    opacity: 1; }
+  100% { transform: translateY(28px); opacity: 0; }
+}
+/* Enter: new number starts 28px above, slides down into place */
+@keyframes numEnter {
+  0%   { transform: translateY(-28px); opacity: 0; }
+  100% { transform: translateY(0);     opacity: 1; }
+}
+.num-exit  { animation: numExit  0.35s ease-in forwards; }
+.num-enter { animation: numEnter 0.35s ease-out 0.2s forwards; opacity: 0; }
 </style>
 <script>
 document.addEventListener("DOMContentLoaded", function() {
 (function() {
+// ── Polyfills for older browsers ──────────────────────────────────
+if (typeof Set === 'undefined' || !Set.prototype.forEach) {
+  window.Set = function(arr) {
+    this._d = {};
+    if (arr) for (var i = 0; i < arr.length; i++) this._d[arr[i]] = true;
+  };
+  Set.prototype.has    = function(v) { return this._d.hasOwnProperty(v); };
+  Set.prototype.add    = function(v) { this._d[v] = true; return this; };
+  Set.prototype.delete = function(v) { delete this._d[v]; return this; };
+  Object.defineProperty(Set.prototype, 'size', { get: function() { return Object.keys(this._d).length; } });
+  Set.prototype.forEach = function(fn) { var k = Object.keys(this._d); for (var i=0;i<k.length;i++) fn(k[i],k[i],this); };
+}
+if (!Array.from) {
+  Array.from = function(a) { return Array.prototype.slice.call(a); };
+}
+
+
 // ================================================================
 // STORAGE
 // ================================================================
 function loadData() {
-  try { return JSON.parse(localStorage.getItem('arith_v3') || 'null') || { games: [], trouble: {} }; }
-  catch(e) { return { games: [], trouble: {} }; }
+  try {
+    var d = JSON.parse(localStorage.getItem('arith_v3') || 'null') || { games: [], trouble: {}, totalCorrect: 0 };
+    // Migration: seed totalCorrect from existing game scores if not yet set
+    if (!d.totalCorrect && d.games && d.games.length) {
+      d.totalCorrect = d.games.reduce(function(sum, g) { return sum + (g.score || 0); }, 0);
+      try { localStorage.setItem('arith_v3', JSON.stringify(d)); } catch(e) {}
+    }
+    return d;
+  }
+  catch(e) { return { games: [], trouble: {}, totalCorrect: 0 }; }
 }
 function saveData(d) {
   try { localStorage.setItem('arith_v3', JSON.stringify(d)); } catch(e) {}
@@ -208,8 +290,12 @@ function showPage(name) {
   document.getElementById('page-' + name).classList.add('active');
   document.querySelector('.nav-btn[data-page="' + name + '"]').classList.add('active');
   if (name === 'history') renderHistory();
-  if (name === 'practice') { renderPatterns(); renderPracticeConfig(); }
+  if (name === 'practice') {
+    try { renderPatterns(); } catch(e) { console.error('renderPatterns failed:', e.message, e.stack); }
+    try { renderPracticeConfig(); } catch(e) { console.error('renderPracticeConfig failed:', e.message, e.stack); }
+  }
   if (name === 'leaderboard') loadLeaderboard();
+  if (name === 'play') { loadPlayLeaderboard(); updateFirstTimeState(); }
   if (name === 'learn') { renderLearnMap(); }
 }
 
@@ -437,6 +523,10 @@ document.getElementById('answer-input').addEventListener('keydown', function(e) 
   if (!accepting) return;
   if (e.key === 'Backspace' && !currentQuestionHadTrouble) {
     currentQuestionHadTrouble = true; troubleCount++;
+    var _bPos = duration > 0 ? Math.max(0, 1 - timeLeft / duration) : 0;
+    var _bElapsed = performance.now() - questionStartTime;
+    updateSkills(currentOp, currentQA, currentQB, _bElapsed, false, _bPos, timeLeft, duration);
+    logQuestion(currentOp, currentQA, currentQB, false, _bElapsed, _bPos, timeLeft, duration);
   }
 });
 
@@ -450,12 +540,17 @@ document.getElementById('answer-input').addEventListener('input', function() {
     stopPaceTicker();
     var elapsed = performance.now() - questionStartTime;
     opData[currentOp].total += elapsed; opData[currentOp].count++;
+    var _gamePos = duration > 0 ? Math.max(0, 1 - timeLeft / duration) : 0;
+    updateSkills(currentOp, currentQA, currentQB, elapsed, true, _gamePos, timeLeft, duration);
+    logQuestion(currentOp, currentQA, currentQB, true, elapsed, _gamePos, timeLeft, duration);
     answeredQuestions.push({
       question: currentQuestion, answer: currentAnswer, op: currentOp,
       elapsed: elapsed, hadTrouble: currentQuestionHadTrouble, a: currentQA, b: currentQB
     });
     score++;
     document.getElementById('score-display').textContent = score;
+    // Increment running total immediately so bailed games count too
+    (function() { var d=loadData(); d.totalCorrect=(d.totalCorrect||0)+1; saveData(d); })();
     accepting = false;
     nextQuestion();
   }
@@ -515,9 +610,12 @@ function endGame() {
     data.trouble[tq.question].lastSeen = Date.now();
   }
   saveData(data);
+  var _newStreak = updateStreak();
+  if (_newStreak) _pendingStreakN = _newStreak;
 
   document.getElementById('game-screen').style.display = 'none';
   document.getElementById('config-screen').style.display = 'block';
+  updateFirstTimeState();
   showPage('results');
 
   document.getElementById('final-score').textContent = score;
@@ -533,7 +631,7 @@ function endGame() {
     mulA:[parseInt(document.getElementById('mul-a1').value),parseInt(document.getElementById('mul-a2').value)],
     mulB:[parseInt(document.getElementById('mul-b1').value),parseInt(document.getElementById('mul-b2').value)]
   };
-  if (isDefaultSettings({ ranges: curRanges })) {
+  if (isDefaultSettings({ ranges: curRanges, ops: Array.from(selectedOps) })) {
     showScoreModal(score, duration);
   }
 
@@ -622,13 +720,53 @@ function renderHistory() {
     hsRows.appendChild(row);
   });
   banner.style.display = anyScore ? 'block' : 'none';
+  renderStreak();
+  // Render ML skill profile
+  var skillProfile = document.getElementById('skill-profile');
+  var skillRowsEl = document.getElementById('skill-rows');
+  var report = getSkillReport();
+  var ops = ['addition','subtraction','multiplication','division'];
+  var syms = { addition:'+', subtraction:'−', multiplication:'×', division:'÷' };
+  var hasSkills = false;
+  if (skillRowsEl) {
+    skillRowsEl.innerHTML = '';
+    ops.forEach(function(op) {
+      if (!report[op]) return;
+      hasSkills = true;
+      var r = report[op];
+      var row = document.createElement('div');
+      row.style.cssText = 'display:flex;align-items:center;gap:10px;';
+      var sym = document.createElement('div');
+      sym.style.cssText = 'font-size:1rem;font-weight:700;width:20px;flex-shrink:0;text-align:center;';
+      sym.textContent = syms[op];
+      var track = document.createElement('div');
+      track.style.cssText = 'flex:1;height:8px;background:#f0f0eb;border-radius:4px;overflow:hidden;';
+      var fill = document.createElement('div');
+      fill.style.cssText = 'height:100%;border-radius:4px;background:#111;transition:width 0.6s ease;';
+      setTimeout(function(w) { return function() { fill.style.width = w + '%'; }; }(r.ability), 100);
+      track.appendChild(fill);
+      var label = document.createElement('div');
+      label.style.cssText = 'display:none';
+      label.textContent = '';
+      row.appendChild(sym); row.appendChild(track); row.appendChild(label);
+      skillRowsEl.appendChild(row);
+    });
+  }
+  if (skillProfile) skillProfile.style.display = hasSkills ? 'block' : 'none';
+
+  var tcBanner = document.getElementById('total-correct-banner');
+  var tcEl = document.getElementById('total-correct-val');
+  var tc = data.totalCorrect || 0;
+  if (tcBanner) tcBanner.style.display = tc > 0 ? 'block' : 'none';
+  if (tcEl) tcEl.textContent = tc.toLocaleString();
 
   if (!data.games.length) { noHist.style.display = 'block'; return; }
   noHist.style.display = 'none';
   var shown = games.slice().reverse();
   shown.forEach(function(g, i) {
     var tr = document.createElement('tr');
-    tr.innerHTML = '<td>' + (data.games.length - i) + '</td><td>' + fmtDate(g.ts) + '</td><td>' + formatTime(g.duration) + '</td><td><strong>' + g.score + '</strong></td><td>' + g.acc + '%</td><td>' + (g.avgTime/1000).toFixed(1) + 's</td>';
+    var gameIdx = data.games.length - 1 - i; // actual index in data.games array
+    tr.innerHTML = '<td>' + (data.games.length - i) + '</td><td>' + fmtDate(g.ts) + '</td><td>' + formatTime(g.duration) + '</td><td><strong>' + g.score + '</strong></td><td>' + g.acc + '%</td><td>' + (g.avgTime/1000).toFixed(1) + 's</td><td><button onclick="deleteGame(' + gameIdx + ')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:0.9rem;padding:2px 4px;line-height:1" title="Delete">&times;</button></td>';
     tbody.appendChild(tr);
   });
   drawGraph('graph-score', games, function(g) { return Math.round(g.score * 120 / g.duration); }, '#111');
@@ -670,6 +808,15 @@ function drawGraph(canvasId, games, getValue, color) {
   ctx.fillText(minV.toFixed(minV < 10 ? 1 : 0), pad.l - 4, pad.t + gH + 1);
 }
 
+function deleteGame(idx) {
+  var d = loadData();
+  if (idx < 0 || idx >= d.games.length) return;
+  d.games.splice(idx, 1);
+  saveData(d);
+  renderHistory();
+  updateFirstTimeState();
+}
+
 function clearHistory() {
   if (!confirm('Clear all game history and trouble patterns?')) return;
   saveData({ games: [], trouble: {} }); renderHistory(); renderPatterns();
@@ -708,7 +855,7 @@ function buildPatterns(trouble, games) {
   }
 
 function buildPatterns_inner(trouble) {
-  var entries = Object.values(trouble);
+  var entries = Object.keys(trouble).map(function(k) { return trouble[k]; });
   if (!entries.length) return [];
   var patterns = [];
   var opList = ['addition','subtraction','multiplication','division'];
@@ -948,15 +1095,12 @@ function renderPatterns() {
 var _cachedPatterns = [];
 
 function renderPracticeConfig() {
-  var d = loadData();
-  _cachedPatterns = buildPatterns(d.trouble, d.games);
-  showPracticeConfig();
-  var btn = document.getElementById('practice-start-btn');
-  if (!_cachedPatterns.length) {
-    btn.disabled = true; btn.textContent = 'No patterns yet';
-  } else {
-    btn.disabled = false; btn.textContent = 'Start practice';
-  }
+  try {
+    var d = loadData();
+    _cachedPatterns = buildPatterns(d.trouble, d.games);
+    showPracticeConfig();
+    renderSpecialisedCards();
+  } catch(e) { console.error('renderPracticeConfig inner:', e.message, e.stack); }
 }
 
 function showPracticeConfig() {
@@ -966,7 +1110,8 @@ function showPracticeConfig() {
 }
 
 function practicePattern(pid) {
-  var p = _cachedPatterns.find(function(x) { return x.id === pid; });
+  var p = null;
+  for (var _pi = 0; _pi < _cachedPatterns.length; _pi++) { if (_cachedPatterns[_pi].id === pid) { p = _cachedPatterns[_pi]; break; } }
   if (!p) return;
   showPage('practice');
   setTimeout(function() { startPatternPractice(p); }, 50);
@@ -1011,7 +1156,7 @@ function startPracticeSession() {
   var queue = [], seen = new Set();
 
   // One pass: exact misses from all patterns
-  _cachedPatterns.forEach(function(p) {
+  (_cachedPatterns || []).forEach(function(p) {
     p.items.forEach(function(item) {
       if (!seen.has(item.question)) {
         queue.push({ question:item.question, answer:item.answer, op:item.op, a:item.a, b:item.b, tag:'Exact miss', similar:false });
@@ -1104,10 +1249,21 @@ function _runPractice(items) {
 // ================================================================
 // INIT
 // ================================================================
-renderHistory();
+// Reset streak for demo — sets lastDate to yesterday so next game triggers animation
+  (function() {
+    var s = loadStreak();
+    var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    var yStr = yesterday.getFullYear() + '-' + ('0'+(yesterday.getMonth()+1)).slice(-2) + '-' + ('0'+yesterday.getDate()).slice(-2);
+    s.lastDate = yStr;
+    s.streak = Math.max(1, s.streak || 1); // keep existing streak or start at 1
+    saveStreak(s);
+  })();
+  renderHistory();
 renderPatterns();
 renderPracticeConfig();
 loadPacePreference();
+loadPlayLeaderboard();
+updateFirstTimeState();
 
 
 // ================================================================
@@ -1192,6 +1348,7 @@ var lbWindow = 'day';
 var lbDur = 120;
 // Score submission uses a closure — _pendingScore is NOT accessible from console
 var _submitFn = null;
+var _pendingStreakN = 0;
 
 function setLbWindow(btn, w) {
   document.querySelectorAll('#lb-window-filters [data-window]').forEach(function(b) { b.classList.remove('active'); });
@@ -1295,6 +1452,7 @@ function showScoreModal(score, duration) {
 function closeModal() {
   document.getElementById('name-modal').style.display = 'none';
   _submitFn = null;
+  if (_pendingStreakN) { var sn = _pendingStreakN; _pendingStreakN = 0; showStreakAnimation(sn); }
 }
 
 var BLOCKED_WORDS = ['fuck','shit','cunt','cock','dick','pussy','ass','bitch','bastard','wank','twat','piss','slut','whore','nigger','nigga','faggot','retard','rape','university of birmingham','univ of birmingham'];
@@ -1332,6 +1490,9 @@ window.submitScore = submitScore;
 window.closeModal = closeModal;
 window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
+window.dismissWelcome = dismissWelcome;
+window.deleteGame = deleteGame;
+window.setPlayLbDur = setPlayLbDur;
 window.nextLearnLevel = nextLearnLevel;
 window.showSkipModal = showSkipModal;
 window.showLearnInfo = showLearnInfo;
@@ -1343,6 +1504,9 @@ window.retryLearnLevel = retryLearnLevel;
 window.closeModal = closeModal;
 window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
+window.dismissWelcome = dismissWelcome;
+window.deleteGame = deleteGame;
+window.setPlayLbDur = setPlayLbDur;
 window.nextLearnLevel = nextLearnLevel;
 window.showSkipModal = showSkipModal;
 window.showLearnInfo = showLearnInfo;
@@ -1384,194 +1548,141 @@ function getLevel(n) {
 
   // Focused "challenge" levels that appear periodically to mix things up.
   // These are fixed and override the phase system.
-  var focused = {
-    // Pure addition sprint
-    7:  { ops:['addition'], addA:[2,50], addB:[2,50], target:12, timeSecs:60, desc:'Addition sprint' },
-    // Pure subtraction
-    10: { ops:['subtraction'], addA:[2,50], addB:[2,50], target:10, timeSecs:60, desc:'Subtraction focus' },
-    // Pure multiplication (small tables)
-    15: { ops:['multiplication'], mulA:[2,6], mulB:[2,20], target:14, timeSecs:60, desc:'Times tables' },
-    // Pure division
-    19: { ops:['division'], mulA:[2,6], mulB:[2,20], target:12, timeSecs:60, desc:'Division focus' },
-    // Add/sub only, bigger numbers
-    23: { ops:['addition','subtraction'], addA:[2,100], addB:[2,100], target:16, timeSecs:90, desc:'Big addition & subtraction' },
-    // Mul/div only
-    28: { ops:['multiplication','division'], mulA:[2,9], mulB:[2,50], target:16, timeSecs:90, desc:'Multiply & divide' },
-    // Pure multiplication — harder tables
-    35: { ops:['multiplication'], mulA:[2,12], mulB:[2,50], target:18, timeSecs:90, desc:'Hard times tables' },
-    // Add/sub blitz — large numbers
-    42: { ops:['addition','subtraction'], addA:[2,200], addB:[2,200], target:20, timeSecs:90, desc:'Large number sprint' },
-    // Pure division — hard
-    48: { ops:['division'], mulA:[2,12], mulB:[2,50], target:15, timeSecs:90, desc:'Division mastery' },
-    // Mul/div — default ranges
-    55: { ops:['multiplication','division'], mulA:[2,12], mulB:[2,100], target:22, timeSecs:120, desc:'Multiply & divide (full)' },
-    // Add/sub marathon
-    63: { ops:['addition','subtraction'], addA:[2,500], addB:[2,500], target:25, timeSecs:120, desc:'Mental arithmetic sprint' },
-    // Pure multiplication — beyond defaults
-    72: { ops:['multiplication'], mulA:[2,15], mulB:[2,100], target:20, timeSecs:90, desc:'Extended times tables' },
-    // Pure division — beyond defaults
-    80: { ops:['division'], mulA:[2,15], mulB:[2,100], target:18, timeSecs:90, desc:'Extended division' },
-    // Mul/div — big numbers
-    90: { ops:['multiplication','division'], mulA:[2,15], mulB:[2,200], target:25, timeSecs:120, desc:'Large multiply & divide' },
-    // Add/sub only — huge numbers
-    100: { ops:['addition','subtraction'], addA:[2,1000], addB:[2,1000], target:28, timeSecs:120, desc:'Thousand-number sprint' },
-    // Pure multiplication — expert
-    115: { ops:['multiplication'], mulA:[2,20], mulB:[2,200], target:22, timeSecs:120, desc:'Expert multiplication' },
-    // Pure division — expert
-    130: { ops:['division'], mulA:[2,20], mulB:[2,200], target:20, timeSecs:120, desc:'Expert division' },
-    // Mul/div — massive
-    150: { ops:['multiplication','division'], mulA:[2,25], mulB:[2,500], target:30, timeSecs:120, desc:'High-range multiply & divide' },
-    // Add/sub — extreme
-    175: { ops:['addition','subtraction'], addA:[2,5000], addB:[2,5000], target:32, timeSecs:120, desc:'Extreme mental arithmetic' },
-    // Pure multiplication — elite
-    200: { ops:['multiplication'], mulA:[2,25], mulB:[2,500], target:28, timeSecs:120, desc:'Elite multiplication' },
+  // ================================================================
+  // LEVEL DESIGN
+  // ================================================================
+  // Calibration:
+  //   Level 1   = ridiculously easy (addition 1-5)
+  //   Level 50  = average person, no training needed
+  //   Level 100 = needs some practice
+  //   Level 200 = getting serious, ~30 correct in 2min
+  //   Level 350 = strong player, ~80 correct
+  //   Level 500 = almost impossible, ~200 correct (world record pace)
+  //
+  // Operations introduced gradually, then cycled for variety.
+  // mulA (left) grows from 2 toward 50 by level 500.
+  // mulB (right) capped at 100.
 
-    // ── Extra variety levels throughout ──
-    // 30s range: mix things up every few levels
-    31: { ops:['addition'], addA:[2,75], addB:[2,75], target:14, timeSecs:60, desc:'Addition focus' },
-    33: { ops:['subtraction'], addA:[2,75], addB:[2,75], target:12, timeSecs:60, desc:'Subtraction focus' },
-    37: { ops:['multiplication'], mulA:[2,10], mulB:[2,30], target:14, timeSecs:75, desc:'Multiplication focus' },
-    40: { ops:['division'], mulA:[2,10], mulB:[2,30], target:12, timeSecs:75, desc:'Division focus' },
-    44: { ops:['multiplication','division'], mulA:[2,10], mulB:[2,50], target:18, timeSecs:90, desc:'Multiply & divide' },
-    46: { ops:['addition','subtraction'], addA:[2,150], addB:[2,150], target:18, timeSecs:90, desc:'Add & subtract' },
-    50: { ops:['multiplication'], mulA:[2,12], mulB:[2,75], target:18, timeSecs:90, desc:'Times tables challenge' },
-    53: { ops:['division'], mulA:[2,12], mulB:[2,75], target:16, timeSecs:90, desc:'Division challenge' },
-    58: { ops:['addition','subtraction'], addA:[2,250], addB:[2,250], target:22, timeSecs:90, desc:'Large number add & sub' },
-    61: { ops:['multiplication','division'], mulA:[2,12], mulB:[2,100], target:22, timeSecs:120, desc:'Full tables' },
-    65: { ops:['multiplication'], mulA:[2,13], mulB:[2,100], target:20, timeSecs:90, desc:'13 times table' },
-    68: { ops:['addition'], addA:[2,500], addB:[2,500], target:24, timeSecs:120, desc:'Addition marathon' },
-    70: { ops:['division'], mulA:[2,13], mulB:[2,100], target:18, timeSecs:90, desc:'Division drill' },
-    75: { ops:['multiplication','division'], mulA:[2,15], mulB:[2,150], target:26, timeSecs:120, desc:'Multiply & divide push' },
-    78: { ops:['subtraction'], addA:[2,500], addB:[2,500], target:22, timeSecs:90, desc:'Subtraction drill' },
-    83: { ops:['multiplication'], mulA:[2,15], mulB:[2,150], target:22, timeSecs:90, desc:'15 times table' },
-    86: { ops:['addition','subtraction'], addA:[2,750], addB:[2,750], target:28, timeSecs:120, desc:'750 add & sub' },
-    88: { ops:['division'], mulA:[2,15], mulB:[2,150], target:20, timeSecs:90, desc:'15s division' },
-    93: { ops:['multiplication','division'], mulA:[2,20], mulB:[2,200], target:28, timeSecs:120, desc:'Big multiply & divide' },
-    96: { ops:['multiplication'], mulA:[2,20], mulB:[2,200], target:24, timeSecs:90, desc:'20 times table' },
-    105: { ops:['addition','subtraction'], addA:[2,2000], addB:[2,2000], target:30, timeSecs:120, desc:'2000 sprint' },
-    110: { ops:['multiplication'], mulA:[2,20], mulB:[2,300], target:25, timeSecs:120, desc:'Wide multiplication' },
-    120: { ops:['division'], mulA:[2,20], mulB:[2,300], target:22, timeSecs:120, desc:'Wide division' },
-    125: { ops:['addition','subtraction'], addA:[2,3000], addB:[2,3000], target:32, timeSecs:120, desc:'3000 add & sub' },
-    140: { ops:['multiplication','division'], mulA:[2,25], mulB:[2,400], target:30, timeSecs:120, desc:'Quarter-thousand tables' },
-    145: { ops:['multiplication'], mulA:[2,25], mulB:[2,400], target:26, timeSecs:120, desc:'25 times table' },
-    160: { ops:['addition','subtraction'], addA:[2,7500], addB:[2,7500], target:35, timeSecs:120, desc:'Big number sprint' },
-    165: { ops:['division'], mulA:[2,25], mulB:[2,400], target:24, timeSecs:120, desc:'25s division' },
-    180: { ops:['multiplication','division'], mulA:[2,30], mulB:[2,500], target:32, timeSecs:120, desc:'30 times table challenge' },
-    190: { ops:['addition','subtraction'], addA:[2,9999], addB:[2,9999], target:36, timeSecs:120, desc:'Max add & sub' },
-    195: { ops:['multiplication'], mulA:[2,30], mulB:[2,500], target:28, timeSecs:120, desc:'Expert 30s' },
-  };
+  // ── Smooth interpolators for ranges and targets ──
+  // ================================================================
+  // LEVEL GENERATION — always default ranges, difficulty via ops+targets+time
+  //
+  // Key insight: add/sub is ~30% faster than mul/div for most people.
+  // So a level with mul/div needs a lower target than one with add/sub
+  // to feel equally hard. We apply a difficulty weight per op set.
+  //
+  // "Pace" = answers per second needed.
+  // Level 1:   pace 0.07 (1 per 15s) — trivially easy
+  // Level 50:  pace 0.25 (1 per 4s)  — easy
+  // Level 100: pace 0.32             — needs practice
+  // Level 200: pace 0.42             — getting serious
+  // Level 350: pace 0.70             — strong player
+  // Level 500: pace 1.67             — world record (200 in 2min)
+  // ================================================================
 
-  if (focused[n]) {
-    var f = focused[n];
-    level.ops     = f.ops;
-    level.addA    = f.addA    || level.addA;
-    level.addB    = f.addB    || level.addB;
-    level.mulA    = f.mulA    || level.mulA;
-    level.mulB    = f.mulB    || level.mulB;
-    level.target  = f.target;
-    level.timeSecs= f.timeSecs;
-    level.desc    = f.desc;
-    level.star2   = Math.ceil(level.target * 1.4);
-    level.star3   = level.target * 2;
-    return level;
+  // Pace curve — answers per second required
+  // Uses flerp (float lerp) — NOT the global lerp which rounds to int
+  function flerp(a, b, t) { return a + (b - a) * Math.min(1, Math.max(0, t)); }
+  function paceForLevel(n) {
+    if (n <= 10)  return flerp(0.12,  0.17,  (n-1)/9);
+    if (n <= 30)  return flerp(0.17,  0.22,  (n-10)/20);
+    if (n <= 60)  return flerp(0.22,  0.27,  (n-30)/30);
+    if (n <= 100) return flerp(0.25,  0.33,  (n-60)/40);
+    if (n <= 200) return flerp(0.33,  0.50,  (n-100)/100);
+    if (n <= 350) return flerp(0.50,  0.83,  (n-200)/150);
+    if (n <= 500) return flerp(0.83,  1.67,  (n-350)/150);
+    return Math.min(3.0, flerp(1.67, 3.0, (n-500)/500));
   }
 
-  // Phase system for all other levels
-  if (n <= 2) {
-    var t = (n - 1) / 1;
-    level.ops = ['addition'];
-    level.addA = [2, lerp(5, 10, t)];
-    level.addB = [2, lerp(5, 10, t)];
-    level.target = lerp(4, 6, t);
-    level.timeSecs = 60;
-    level.desc = 'Addition warm-up';
-  }
-  else if (n <= 5) {
-    var t = (n - 3) / 2;
-    level.ops = ['addition', 'subtraction'];
-    level.addA = [2, lerp(10, 20, t)];
-    level.addB = [2, lerp(10, 20, t)];
-    level.target = lerp(6, 10, t);
-    level.timeSecs = 60;
-    level.desc = 'Addition & subtraction';
-  }
-  else if (n <= 12) {
-    var t = (n - 6) / 6;
-    level.ops = ['addition', 'subtraction', 'multiplication'];
-    level.addA = [2, lerp(20, 40, t)];
-    level.addB = [2, lerp(20, 40, t)];
-    level.mulA = [2, lerp(4, 7, t)];
-    level.mulB = [2, lerp(10, 20, t)];
-    level.target = lerp(8, 14, t);
-    level.timeSecs = 90;
-    level.desc = n <= 9 ? 'Introducing multiplication' : 'Mixed operations';
-  }
-  else if (n <= 25) {
-    var t = (n - 13) / 12;
-    level.ops = ['addition', 'subtraction', 'multiplication', 'division'];
-    level.addA = [2, lerp(40, 80, t)];
-    level.addB = [2, lerp(40, 80, t)];
-    level.mulA = [2, lerp(7, 10, t)];
-    level.mulB = [2, lerp(15, 40, t)];
-    level.target = lerp(12, 20, t);
-    level.timeSecs = 120;
-    level.desc = n <= 18 ? 'Introducing division' : 'All four operations';
-  }
-  else if (n <= 60) {
-    var t = (n - 26) / 34;
-    level.ops = ['addition', 'subtraction', 'multiplication', 'division'];
-    level.addA = [2, 100];
-    level.addB = [2, 100];
-    level.mulA = [2, lerp(10, 12, t)];
-    level.mulB = [2, lerp(50, 100, t)];
-    level.target = lerp(22, 35, t);
-    level.timeSecs = 120;
-    level.desc = 'Growing numbers';
-  }
-  else if (n <= 200) {
-    var t = (n - 61) / 139;
-    level.ops = ['addition', 'subtraction', 'multiplication', 'division'];
-    level.addA = [2, lerp(100, 500, t)];
-    level.addB = [2, lerp(100, 500, t)];
-    level.mulA = [2, lerp(12, 15, t)];
-    level.mulB = [2, lerp(100, 200, t)];
-    level.target = lerp(35, 55, t);
-    level.timeSecs = 120;
-    level.desc = 'Beyond the basics';
-  }
-  else if (n <= 600) {
-    var t = (n - 201) / 399;
-    level.ops = ['addition', 'subtraction', 'multiplication', 'division'];
-    level.addA = [2, lerp(500, 9999, t)];
-    level.addB = [2, lerp(500, 9999, t)];
-    level.mulA = [2, lerp(15, 25, t)];
-    level.mulB = [2, lerp(200, 999, t)];
-    level.target = lerp(55, 100, t);
-    level.timeSecs = 120;
-    level.desc = 'Expert territory';
-  }
-  else {
-    var extra = n - 601;
-    var addMax = Math.min(999999, 9999 + extra * 50);
-    var mulAMax = Math.min(999, 25 + Math.floor(extra / 10));
-    var mulBMax = Math.min(9999, 999 + extra * 5);
-    // Alternate between focused and mixed every ~20 levels
-    var cycle = Math.floor(extra / 20) % 4;
-    if (cycle === 0)      level.ops = ['multiplication', 'division'];
-    else if (cycle === 1) level.ops = ['addition', 'subtraction'];
-    else if (cycle === 2) level.ops = ['multiplication'];
-    else                  level.ops = ['addition', 'subtraction', 'multiplication', 'division'];
-    level.addA = [2, addMax];
-    level.addB = [2, addMax];
-    level.mulA = [2, mulAMax];
-    level.mulB = [2, mulBMax];
-    level.target = Math.min(200, 100 + Math.floor(extra / 20));
-    level.timeSecs = 120;
-    level.desc = cycle === 2 ? 'Pure multiplication' : cycle === 0 ? 'Multiply & divide' : cycle === 1 ? 'Mental arithmetic' : 'Full mix';
+  // Op difficulty weight (relative to all-four = 1.0)
+  // Add/sub is easier, so we demand more answers from those levels.
+  // Mul/div is harder, so we demand fewer.
+  function opWeight(ops) {
+    var s = ops.slice().sort().join(',');
+    if (s === 'addition')                              return 0.85; // slightly easier
+    if (s === 'addition,subtraction')                  return 0.90;
+    if (s === 'multiplication')                        return 1.10; // slightly harder
+    if (s === 'division')                              return 1.15;
+    if (s === 'multiplication,division')               return 1.10;
+    if (s === 'addition,multiplication')               return 1.00;
+    if (s === 'addition,division,multiplication,subtraction') return 1.00; // all four
+    return 1.00;
   }
 
-  level.star2 = Math.ceil(level.target * 1.4);
-  level.star3 = level.target * 2;
+  // Time: short at early levels, ramps to 2min, stays there
+  function timeForLevel(n) {
+    if (n <= 5)   return 20;
+    if (n <= 15)  return 30;
+    if (n <= 30)  return 45;
+    if (n <= 50)  return 60;
+    if (n <= 80)  return 90;
+    return 120;
+  }
+
+  // Op set cycles — introduce ops gradually, then mix with ~50% all-four
+  function opsForLevel(n) {
+    var ALL    = ['addition','subtraction','multiplication','division'];
+    var ADDSUB = ['addition','subtraction'];
+    var MULDIV = ['multiplication','division'];
+    var MUL    = ['multiplication'];
+    var DIV    = ['division'];
+    var ADD    = ['addition'];
+
+    if (n <= 3)  return ADD;
+    if (n <= 8)  return ADDSUB;
+    if (n <= 14) return ['addition','subtraction','multiplication'];
+    if (n <= 18) return ALL;
+    // From 19+ cycle: 4 of 8 slots = ALL (50%), others rotate
+    var cycle = n % 8;
+    if (cycle === 0) return ALL;
+    if (cycle === 1) return ADDSUB;
+    if (cycle === 2) return ALL;
+    if (cycle === 3) return MULDIV;
+    if (cycle === 4) return ALL;
+    if (cycle === 5) return MUL;
+    if (cycle === 6) return ALL;
+    return DIV;
+  }
+
+  function descForOps(ops) {
+    var sorted = ops.slice().sort().join(',');
+    var map = {
+      'addition':                              'Addition only',
+      'subtraction':                           'Subtraction only',
+      'multiplication':                        'Multiplication only',
+      'division':                              'Division only',
+      'addition,subtraction':                  'Addition & subtraction',
+      'multiplication,division': 'Multiply' + ' & divide',
+      'addition,division,multiplication,subtraction': 'All four operations',
+      'addition,multiplication,subtraction':   'Add, sub & multiply'
+    };
+    return map[sorted] || 'Mixed operations';
+  }
+
+  var ops   = opsForLevel(n);
+  var tSecs = timeForLevel(n);
+  var pace  = paceForLevel(n);
+  var wt    = opWeight(ops);
+  // Target = pace * time / weight (harder ops = lower target needed for same difficulty)
+  // pace defines 3-star "perfect run". 1-star is achievable by anyone trying.
+  var star3 = Math.max(3, Math.round(pace * tSecs / wt));
+  var star1 = Math.max(1, Math.round(star3 * 0.5));
+  var star2 = Math.round((star1 + star3) / 2);
+  // Ensure minimum gap of 2 between each star
+  if (star2 < star1 + 2) star2 = star1 + 2;
+  if (star3 < star2 + 2) star3 = star2 + 2;
+
+  level.ops      = ops;
+  level.addA     = [2, 100];
+  level.addB     = [2, 100];
+  level.mulA     = [2, 12];
+  level.mulB     = [2, 100];
+  level.target   = star1;
+  level.star2    = star2;
+  level.star3    = star3;
+  level.timeSecs = tSecs;
+  level.numType  = 'normal';
+  level.desc     = descForOps(ops);
   return level;
 }
 
@@ -1849,28 +1960,52 @@ function retryLearnLevel() {
   if (_learnLevel) showLearnInfo(_learnLevel.n);
 }
 
+// Small primes list for learn mode (up to 97)
+var PRIMES = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97];
+
+function randOdd(lo, hi) {
+  lo = Math.max(lo, 1); if (lo % 2 === 0) lo++;
+  hi = Math.min(hi, 999); if (hi % 2 === 0) hi--;
+  if (lo > hi) return lo;
+  var count = Math.floor((hi - lo) / 2) + 1;
+  return lo + Math.floor(Math.random() * count) * 2;
+}
+
+function randPrime(lo, hi) {
+  var eligible = PRIMES.filter(function(p) { return p >= lo && p <= hi; });
+  if (!eligible.length) return randOdd(lo, hi); // fallback
+  return eligible[Math.floor(Math.random() * eligible.length)];
+}
+
+function randSpecial(lo, hi, numType) {
+  if (numType === 'odd')   return randOdd(lo, hi);
+  if (numType === 'prime') return randPrime(lo, hi);
+  return randInt(lo, hi);
+}
+
 function nextLearnQuestion() {
   var lv = _learnLevel;
   var ops = lv.ops;
   var op = ops[Math.floor(Math.random() * ops.length)];
   var a, b, q, ans;
 
+  var nt = lv.numType || 'normal';
   if (op === 'addition') {
-    a = randInt(lv.addA[0], lv.addA[1]);
-    b = randInt(lv.addB[0], lv.addB[1]);
+    a = randSpecial(lv.addA[0], lv.addA[1], nt);
+    b = randSpecial(lv.addB[0], lv.addB[1], nt);
     q = a + ' + ' + b + ' ='; ans = a + b;
   } else if (op === 'subtraction') {
-    a = randInt(lv.addA[0], lv.addA[1]);
-    b = randInt(lv.addB[0], lv.addB[1]);
-    while (a === b) b = randInt(lv.addB[0], lv.addB[1]);
+    a = randSpecial(lv.addA[0], lv.addA[1], nt);
+    b = randSpecial(lv.addB[0], lv.addB[1], nt);
+    while (a === b) b = randSpecial(lv.addB[0], lv.addB[1], nt);
     var big = Math.max(a,b), sml = Math.min(a,b);
     q = big + ' - ' + sml + ' ='; ans = big - sml; a = big; b = sml;
   } else if (op === 'multiplication') {
-    a = randInt(lv.mulA[0], lv.mulA[1]);
+    a = randSpecial(lv.mulA[0], lv.mulA[1], nt);
     b = randInt(lv.mulB[0], lv.mulB[1]);
     q = a + ' x ' + b + ' ='; ans = a * b;
   } else {
-    a = randInt(lv.mulA[0], lv.mulA[1]);
+    a = randSpecial(lv.mulA[0], lv.mulA[1], nt);
     b = randInt(lv.mulB[0], lv.mulB[1]);
     q = (a * b) + ' ÷ ' + a + ' ='; ans = b;
   }
@@ -1958,7 +2093,7 @@ function updateLearnStreak(lv, score) {
 
 function updateLearnStarMarkers(lv, score) {
   var thresholds = [lv.target, lv.star2, lv.star3];
-  var markers = document.querySelectorAll('#learn-star-markers > div');
+  var markers = Array.prototype.slice.call(document.querySelectorAll('#learn-star-markers > div'));
   markers.forEach(function(el, i) {
     var achieved = score >= thresholds[i];
     var starRow = el.children[0];
@@ -1990,6 +2125,8 @@ function endLearnLevel() {
   // If they skipped ahead, mark intermediate levels as seen (not starred)
   if (passed && lv.n > ld.unlocked + 5) { /* skipped ahead — unlocked is already set above */ }
   saveLearnData(ld);
+  var _newStreakL = updateStreak();
+  if (_newStreakL) { setTimeout(function() { showStreakAnimation(_newStreakL); }, 600); }
 
   // Show result
   document.getElementById('learn-game-view').style.display = 'none';
@@ -2041,6 +2178,575 @@ function exitLearnGame() {
 }
 
 
+
+// ================================================================
+// PLAY TAB LEADERBOARD PREVIEW
+// ================================================================
+var _playLbDur = 120;
+
+function setPlayLbDur(btn, d) {
+  document.querySelectorAll('#play-lb-dur-row [data-plbdur]').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  _playLbDur = d;
+  loadPlayLeaderboard();
+}
+
+function loadPlayLeaderboard() {
+  var list = document.getElementById('play-lb-list');
+  var loading = document.getElementById('play-lb-loading');
+  if (!list) return;
+  list.innerHTML = '';
+  loading.style.display = 'block';
+  loading.textContent = 'Loading...';
+
+  fetch(SUPA_URL + '/rest/v1/rpc/get_best_scores', {
+    method: 'POST',
+    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ dur: _playLbDur, win_start: null })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(rows) {
+    loading.style.display = 'none';
+    if (!Array.isArray(rows) || !rows.length) {
+      loading.style.display = 'block';
+      loading.textContent = 'No scores yet.';
+      return;
+    }
+    rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 5);
+    var myName = localStorage.getItem('arith_name') || '';
+    rows.forEach(function(row, i) {
+      var el = document.createElement('div');
+      el.className = 'lb-row';
+      var isYou = myName && row.name.toLowerCase() === myName.toLowerCase();
+      el.innerHTML =
+        '<div class="lb-rank' + (i < 3 ? ' top3' : '') + '">' + (i+1) + '</div>' +
+        '<div class="lb-name' + (isYou ? ' you' : '') + '">' + escHtml(row.name) + '</div>' +
+        '<div class="lb-score">' + row.score + '</div>';
+      list.appendChild(el);
+    });
+  })
+  .catch(function() {
+    loading.style.display = 'block';
+    loading.textContent = 'Could not load scores.';
+  });
+}
+
+
+
+// ================================================================
+// FIRST-TIME USER EXPERIENCE
+// ================================================================
+function dismissWelcome() {
+  document.getElementById('welcome-banner').style.display = 'none';
+  try { localStorage.setItem('arith_welcome_dismissed', '1'); } catch(e) {}
+}
+
+function updateFirstTimeState() {
+  var data = loadData();
+  var hasGames = data.games.length > 0;
+  var hasTwoGames = data.games.length >= 2;
+
+  // Welcome banner: show until first game played
+  var banner = document.getElementById('welcome-banner');
+  var dismissed = false;
+  try { dismissed = localStorage.getItem('arith_welcome_dismissed') === '1'; } catch(e) {}
+  if (banner) banner.style.display = (hasGames || dismissed) ? 'none' : 'block';
+
+  // Lock Results/History/Practise tabs until games played
+  var resultsBtn = document.querySelector('.nav-btn[data-page="results"]');
+  var historyBtn = document.querySelector('.nav-btn[data-page="history"]');
+  var practiseBtn = document.querySelector('.nav-btn[data-page="practice"]');
+
+  if (resultsBtn) resultsBtn.classList.toggle('nav-locked', !hasGames);
+  if (historyBtn) historyBtn.classList.toggle('nav-locked', !hasGames);
+  if (practiseBtn) practiseBtn.classList.toggle('nav-locked', !hasTwoGames);
+}
+
+
+
+// ================================================================
+// STREAK
+// ================================================================
+function todayStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+function loadStreak() {
+  try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null }; }
+  catch(e) { return { streak: 0, lastDate: null }; }
+}
+
+function resetStreakForDemo() {
+  saveStreak({ streak: 0, lastDate: null });
+}
+
+function saveStreak(s) {
+  try { localStorage.setItem('arith_streak', JSON.stringify(s)); } catch(e) {}
+}
+
+function updateStreak() {
+  var s = loadStreak();
+  var today = todayStr();
+  if (s.lastDate === today) return false; // already counted today
+  var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  var yStr = yesterday.getFullYear() + '-' + ('0'+(yesterday.getMonth()+1)).slice(-2) + '-' + ('0'+yesterday.getDate()).slice(-2);
+  if (s.lastDate === yStr) {
+    s.streak = (s.streak || 0) + 1;
+  } else {
+    s.streak = 1;
+  }
+  s.lastDate = today;
+  saveStreak(s);
+  return s.streak; // return new streak value
+}
+
+function renderStreak() {
+  var s = loadStreak();
+  var banner = document.getElementById('streak-banner');
+  var val = document.getElementById('streak-val');
+  var sub = document.getElementById('streak-sub');
+  if (!banner) return;
+  if (s.streak > 0) {
+    banner.style.display = 'block';
+    val.textContent = s.streak;
+    sub.textContent = s.streak === 1 ? 'day' : 'days';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+
+
+function showStreakAnimation(n) {
+  var overlay = document.getElementById('streak-overlay');
+  var oldEl = document.getElementById('streak-num-old');
+  var newEl = document.getElementById('streak-num-new');
+  if (!overlay || !oldEl || !newEl) return;
+
+  var prev = n - 1;
+
+  // Reset classes
+  oldEl.className = 'streak-num-item';
+  newEl.className = 'streak-num-item';
+  oldEl.style.opacity = '1';
+  newEl.style.opacity = '0';
+
+  if (prev > 0) {
+    // Show previous number, then animate it out while new slides in
+    oldEl.textContent = prev;
+    newEl.textContent = n;
+    oldEl.style.opacity = '1';
+    newEl.style.opacity = '0';
+
+    overlay.classList.add('visible');
+
+    // After popup appears, animate the number transition
+    setTimeout(function() {
+      oldEl.classList.add('num-exit');
+      newEl.classList.add('num-enter');
+    }, 600);
+
+    setTimeout(function() { overlay.classList.remove('visible'); }, 2800);
+  } else {
+    // First ever streak — just show the number, no slide
+    oldEl.style.opacity = '0';
+    newEl.textContent = n;
+    newEl.style.opacity = '1';
+    overlay.classList.add('visible');
+    setTimeout(function() { overlay.classList.remove('visible'); }, 2200);
+  }
+}
+
+
+// ================================================================
+// ML SKILL MODEL
+// Parameters tracked per answer:
+//   1.  op              — operation type
+//   4.  unitsA          — units digit of left operand
+//   5.  unitsB          — units digit of right operand
+//   6.  hasPrime        — either operand is prime
+//   8.  hasCarry        — answer requires carrying (add/sub)
+//   11. elapsed         — raw response time (ms)
+//   16. gamePosition    — fraction through game (0=early, 1=late)
+//   21. magBucket       — per-operand-magnitude bucket
+//   23. timePressure    — whether time was low (<25%) when answered
+//   28. questionHistory — historical accuracy on this exact question
+// ================================================================
+
+var SMALL_PRIMES_ARR = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97];
+var SMALL_PRIMES = { has: function(n) { return SMALL_PRIMES_ARR.indexOf(n) !== -1; } };
+
+function isPrime(n) { return SMALL_PRIMES.has(n); }
+
+function magBucket(n) {
+  // Returns 'small' (2-12), 'medium' (13-50), 'large' (51-100)
+  if (n <= 12)  return 'small';
+  if (n <= 50)  return 'medium';
+  return 'large';
+}
+
+function hasCarry(op, a, b) {
+  if (op !== 'addition' && op !== 'subtraction') return false;
+  if (op === 'addition') {
+    // Any column addition where digits sum > 9
+    var au = a % 10, bu = b % 10;
+    if (au + bu >= 10) return true;
+    var at = Math.floor(a/10) % 10, bt = Math.floor(b/10) % 10;
+    var carryFromUnits = (au + bu >= 10) ? 1 : 0;
+    if (at + bt + carryFromUnits >= 10) return true;
+    return false;
+  }
+  if (op === 'subtraction') {
+    // Requires borrowing if any digit of smaller > corresponding digit of larger
+    var big = Math.max(a,b), sml = Math.min(a,b);
+    return (big % 10) < (sml % 10);
+  }
+  return false;
+}
+
+// ── Skill keys ───────────────────────────────────────────────────
+// We decompose each question into a set of skill dimensions.
+// Each dimension has an ability estimate θ ∈ [-3, 3] (starts at 0)
+// and a confidence n (number of observations).
+
+function skillKeysForQuestion(op, a, b, elapsed, gamePosition, timeLeft, duration, correct) {
+  var keys = [];
+
+  // 1. Operation
+  keys.push('op:' + op);
+
+  // 4. Units digit of a (for mul/div only — meaningful there)
+  if (op === 'multiplication' || op === 'division') {
+    keys.push('unitsA:' + (a % 10));
+    // 5. Units digit of b
+    keys.push('unitsB:' + (b % 10));
+    // 6. Prime operand
+    if (isPrime(a)) keys.push('prime:a');
+    if (isPrime(b)) keys.push('prime:b');
+    // 21. Magnitude bucket (mul A is the multiplier, meaningful)
+    keys.push('magA:' + magBucket(a));
+    keys.push('magB:' + magBucket(b));
+  } else {
+    // For add/sub, units digits still matter for carrying
+    keys.push('unitsA:add:' + (a % 10));
+    keys.push('unitsB:add:' + (b % 10));
+    // 21. Magnitude for add/sub
+    keys.push('magA:add:' + magBucket(a));
+  }
+
+  // 8. Carry/borrow
+  if (hasCarry(op, a, b)) keys.push('carry:yes');
+
+  return keys;
+}
+
+// ── Bayesian ability update ───────────────────────────────────────
+// Simple online update: shift θ toward correct/incorrect
+// Learning rate decreases as confidence grows (like a Kalman filter)
+
+function loadSkills() {
+  try { return JSON.parse(localStorage.getItem('arith_skills') || 'null') || {}; }
+  catch(e) { return {}; }
+}
+
+function saveSkills(s) {
+  try { localStorage.setItem('arith_skills', JSON.stringify(s)); } catch(e) {}
+}
+
+function updateSkills(op, a, b, elapsed, correct, gamePosition, timeLeft, duration) {
+  var skills = loadSkills();
+  var keys = skillKeysForQuestion(op, a, b, elapsed, gamePosition, timeLeft, duration, correct) || [];
+
+  // 11. Response time signal: fast correct = stronger positive, slow correct = weaker
+  // We use a speed multiplier based on z-score vs typical (~2000ms)
+  var speedMultiplier = correct ? Math.max(0.3, Math.min(1.5, 2000 / Math.max(500, elapsed))) : 1.0;
+
+  // 23. Time pressure: if time is low, weight the observation more (performing under pressure)
+  var pressureMultiplier = (timeLeft / duration < 0.25) ? 1.3 : 1.0;
+
+  var learningSignal = (correct ? 1 : -1) * speedMultiplier * pressureMultiplier;
+
+  keys.forEach(function(key) {
+    if (!skills[key]) skills[key] = { theta: 0, n: 0, correct: 0, total: 0 };
+    var s = skills[key];
+    s.n++;
+    s.total++;
+    if (correct) s.correct++;
+    // Learning rate decays with more observations (start fast, slow down)
+    var lr = Math.max(0.05, 0.4 / Math.sqrt(s.n));
+    s.theta = Math.max(-3, Math.min(3, s.theta + lr * learningSignal));
+  });
+
+  // 28. Historical accuracy on exact question string
+  var qKey = 'q:' + op + ':' + a + ':' + b;
+  if (!skills[qKey]) skills[qKey] = { theta: 0, n: 0, correct: 0, total: 0 };
+  var qs = skills[qKey];
+  qs.n++; qs.total++; if (correct) qs.correct++;
+  var qlr = Math.max(0.05, 0.5 / Math.sqrt(qs.n));
+  qs.theta = Math.max(-3, Math.min(3, qs.theta + qlr * learningSignal));
+
+  saveSkills(skills);
+}
+
+// ── Weakness scoring ──────────────────────────────────────────────
+// Returns a score 0-1 for how weak a player is on a given question.
+// Used by the practice/pattern system to prioritise questions.
+
+function weaknessScore(op, a, b) {
+  var skills = loadSkills();
+  var keys = skillKeysForQuestion(op, a, b, 2000, true, 60, 120, true) || [];
+  keys.push('q:' + op + ':' + a + ':' + b);
+
+  var totalTheta = 0, count = 0;
+  keys.forEach(function(key) {
+    if (skills[key]) { totalTheta += skills[key].theta; count++; }
+  });
+
+  if (!count) return null; // no data — exclude from ML practice
+  var avgTheta = totalTheta / count;
+  // Convert theta to weakness: low theta = high weakness
+  // sigmoid(-theta) gives probability of struggling
+  return 1 / (1 + Math.exp(avgTheta));
+}
+
+// ── Skill report for display ──────────────────────────────────────
+function getSkillReport() {
+  var skills = loadSkills();
+  var ops = ['addition','subtraction','multiplication','division'];
+  var report = {};
+  ops.forEach(function(op) {
+    var key = 'op:' + op;
+    if (skills[key] && skills[key].total > 0) {
+      report[op] = {
+        theta: skills[key].theta,
+        accuracy: (skills[key].correct / skills[key].total * 100).toFixed(0),
+        n: skills[key].total,
+        // Convert theta to a 0-100 ability score (sigmoid scaled)
+        ability: Math.round(1 / (1 + Math.exp(-skills[key].theta)) * 100)
+      };
+    }
+  });
+  return report;
+}
+
+
+
+// ================================================================
+// QUESTION LOGGING (for ML training data)
+// Fire-and-forget — no impact on gameplay
+// ================================================================
+function logQuestion(op, a, b, correct, elapsedMs, gamePos, timeLeft, dur) {
+  var payload = {
+    op:            op,
+    a:             a,
+    b:             b,
+    correct:       correct,
+    elapsed_ms:    Math.round(elapsedMs),
+    game_position: Math.round(gamePos * 100) / 100,
+    time_pressure: (timeLeft / dur) < 0.25,
+    units_a:       a % 10,
+    units_b:       b % 10,
+    has_prime:     SMALL_PRIMES.has(a) || SMALL_PRIMES.has(b),
+    has_carry:     hasCarry(op, a, b),
+    mag_a:         magBucket(a),
+    mag_b:         magBucket(b)
+  };
+  fetch(SUPA_URL + '/rest/v1/question_log', {
+    method: 'POST',
+    headers: {
+      'apikey':        SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type':  'application/json',
+      'Prefer':        'return=minimal'
+    },
+    body: JSON.stringify(payload)
+  }).catch(function() {}); // silent fail — never block gameplay
+}
+
+
+
+// ================================================================
+// PRACTICE TAB — ML + SPECIALISED + PATTERNS
+// ================================================================
+
+// ── Generate candidate questions from default ranges ──
+function allDefaultQuestions() {
+  // Returns a sample of candidate questions across all ops
+  // Too expensive to enumerate all ~12000, so we sample smartly
+  var candidates = [];
+  var ops = ['addition','subtraction','multiplication','division'];
+
+  // Add/sub: sample 200 pairs from [2,100]x[2,100]
+  for (var i = 0; i < 200; i++) {
+    var a = 2 + Math.floor(Math.random() * 99);
+    var b = 2 + Math.floor(Math.random() * 99);
+    while (a === b) b = 2 + Math.floor(Math.random() * 99);
+    var big = Math.max(a,b), sml = Math.min(a,b);
+    candidates.push({ op:'addition',    a:a,   b:b,   question:a+' + '+b+' =',           answer:a+b });
+    candidates.push({ op:'subtraction', a:big, b:sml, question:big+' - '+sml+' =',        answer:big-sml });
+  }
+  // Mul/div: enumerate all [2,12]x[2,100]
+  for (var ma = 2; ma <= 12; ma++) {
+    for (var mb = 2; mb <= 100; mb++) {
+      candidates.push({ op:'multiplication', a:ma, b:mb, question:ma+' x '+mb+' =',           answer:ma*mb });
+      candidates.push({ op:'division',       a:ma, b:mb, question:(ma*mb)+' ÷ '+ma+' =', answer:mb });
+    }
+  }
+  return candidates;
+}
+
+// ── SECTION 1: ML General practice ──
+function startMLPractice() {
+  var candidates = allDefaultQuestions();
+  var skills = loadSkills();
+
+  // Only score questions where we have real data (at least one skill key observed)
+  var scored = [];
+  for (var _ci = 0; _ci < candidates.length; _ci++) {
+    var q = candidates[_ci];
+    var w = weaknessScore(q.op, q.a, q.b);
+    if (w !== null) scored.push({ q: q, w: w });
+  }
+
+  if (!scored.length) {
+    alert('Play more games first — not enough data to identify weak questions yet.');
+    return;
+  }
+
+  // Sort by weakness descending (most struggled = highest score)
+  scored.sort(function(a, b) { return b.w - a.w; });
+
+  // Take top 20, deduplicated by question string
+  var seen = {}, queue = [];
+  for (var _si = 0; _si < scored.length && queue.length < 20; _si++) {
+    var sq = scored[_si].q;
+    if (!seen[sq.question]) { seen[sq.question] = true; queue.push(sq); }
+  }
+
+  _runPractice(queue.map(function(q) {
+    return Object.assign({}, q, { tag: 'Weakest', similar: false, _cleared:false, _failed:false, _seen:false });
+  }));
+}
+
+// ── SECTION 2: Specialised practice cards ──
+var SPECIALISED = [
+  {
+    id: 'carry',
+    title: 'Carrying & borrowing',
+    detail: 'Addition and subtraction requiring a carry or borrow.',
+    filter: function(q) {
+      return (q.op === 'addition' || q.op === 'subtraction') && hasCarry(q.op, q.a, q.b);
+    },
+    tag: 'Carry'
+  },
+  {
+    id: 'prime',
+    title: 'Prime multipliers',
+    detail: 'Multiplication and division where the left operand is prime.',
+    filter: function(q) {
+      return (q.op === 'multiplication' || q.op === 'division') && SMALL_PRIMES.has(q.a);
+    },
+    tag: 'Prime'
+  },
+
+  {
+    id: 'large',
+    title: 'Large multiplications',
+    detail: 'Multiplication where the right operand is in the 51–100 range.',
+    filter: function(q) { return q.op === 'multiplication' && q.b > 50; },
+    tag: 'Large'
+  },
+  {
+    id: 'div',
+    title: 'Division only',
+    detail: 'Pure division drill across the full default range.',
+    filter: function(q) { return q.op === 'division'; },
+    tag: '÷'
+  },
+  {
+    id: 'mul',
+    title: 'Multiplication only',
+    detail: 'Pure multiplication drill across the full default range.',
+    filter: function(q) { return q.op === 'multiplication'; },
+    tag: '×'
+  },
+  {
+    id: 'addsub',
+    title: 'Addition & subtraction',
+    detail: 'Mixed add and subtract up to 100.',
+    filter: function(q) { return q.op === 'addition' || q.op === 'subtraction'; },
+    tag: '+−'
+  }
+];
+
+function startSpecialisedPractice(id) {
+  var spec = null;
+  for (var _si = 0; _si < SPECIALISED.length; _si++) { if (SPECIALISED[_si].id === id) { spec = SPECIALISED[_si]; break; } }
+  if (!spec) return;
+  var candidates = allDefaultQuestions().filter(spec.filter);
+  // Rank by weakness within this specialisation
+  candidates.forEach(function(q) { q._weakness = weaknessScore(q.op, q.a, q.b); });
+  candidates.sort(function(a,b) { return b._weakness - a._weakness; });
+  // Take top 20, but ensure variety (not all the same question)
+  var seen = new Set(), queue = [];
+  for (var i = 0; i < candidates.length && queue.length < 20; i++) {
+    var c = candidates[i];
+    if (!seen.has(c.question)) { seen.add(c.question); queue.push(c); }
+  }
+  if (!queue.length) { alert('Not enough data yet — play more games first.'); return; }
+  _runPractice(queue.map(function(q) {
+    return Object.assign({}, q, { tag: spec.tag, similar: false, _cleared:false, _failed:false, _seen:false });
+  }));
+}
+
+function renderSpecialisedCards() {
+  var list = document.getElementById('specialised-list');
+  if (!list || !SPECIALISED) return;
+  list.innerHTML = '';
+
+  // Score each specialisation by average weakness of its candidate questions
+  // Only show top 3 weakest (threshold > 0.55) — don't show if no data yet
+  var candidates = allDefaultQuestions();
+  var scored = [];
+  for (var _si = 0; _si < SPECIALISED.length; _si++) {
+    var spec = SPECIALISED[_si];
+    var filtered = candidates.filter(spec.filter);
+    if (!filtered.length) continue;
+    // Average weakness across a sample of 30 questions in this category
+    var sample = filtered.slice(0, 30);
+    var totalW = 0;
+    for (var _qi = 0; _qi < sample.length; _qi++) {
+      var _sw = weaknessScore(sample[_qi].op, sample[_qi].a, sample[_qi].b);
+      totalW += (_sw !== null ? _sw : 0);
+    }
+    var avgW = totalW / sample.length;
+    // Only include if meaningfully weak (above neutral 0.5) and enough skill data exists
+    if (avgW > 0.52) scored.push({ spec: spec, weakness: avgW });
+  }
+
+  // Sort by weakness, show top 3
+  scored.sort(function(a, b) { return b.weakness - a.weakness; });
+  var toShow = scored.slice(0, 3);
+
+  for (var _ti = 0; _ti < toShow.length; _ti++) {
+    (function(spec) {
+      var card = document.createElement('div');
+      card.className = 'pattern-card';
+      card.style.marginBottom = '8px';
+      card.innerHTML =
+        '<div class="pattern-card-header"><div class="pattern-card-title">' + spec.title + '</div></div>' +
+        '<div class="pattern-card-detail">' + spec.detail + '</div>' +
+        '<button class="pattern-practice-btn">Practice now</button>';
+      card.querySelector('.pattern-practice-btn').addEventListener('click', function() {
+        startSpecialisedPractice(spec.id);
+      });
+      list.appendChild(card);
+    })(toShow[_ti].spec);
+  }
+}
+
+
 // Expose to window for inline onclick handlers
 window.startGame = startGame;
 window.quitGame = quitGame;
@@ -2052,6 +2758,8 @@ window.clearHistory = clearHistory;
 window.startPracticeFromResults = startPracticeFromResults;
 window.showPage = showPage;
 window.startPracticeSession = startPracticeSession;
+window.startMLPractice = startMLPractice;
+window.startSpecialisedPractice = startSpecialisedPractice;
 window.endPracticeSession = endPracticeSession;
 window.showPracticeConfig = showPracticeConfig;
 window.practicePattern = practicePattern;
@@ -2062,6 +2770,9 @@ window.submitScore = submitScore;
 window.closeModal = closeModal;
 window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
+window.dismissWelcome = dismissWelcome;
+window.deleteGame = deleteGame;
+window.setPlayLbDur = setPlayLbDur;
 window.nextLearnLevel = nextLearnLevel;
 window.showSkipModal = showSkipModal;
 window.showLearnInfo = showLearnInfo;
@@ -2087,6 +2798,32 @@ window.retryLearnLevel = retryLearnLevel;
 
 <!-- PLAY -->
 <div class="page active" id="page-play">
+  <!-- First-time welcome banner -->
+  <div id="welcome-banner" style="display:none;width:100%;background:white;border:1px solid #ddd;padding:20px 18px;margin-bottom:20px;position:relative">
+    <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.1rem;cursor:pointer;color:#bbb;line-height:1;padding:0" title="Dismiss">&times;</button>
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:8px">Welcome to Alkaliner</div>
+    <div style="font-size:0.65rem;color:#888;line-height:1.8;margin-bottom:12px">
+      A mental arithmetic speed drill. Answer as many questions as you can before time runs out.<br>
+      <strong style="color:#111">How to play:</strong> type your answer and press nothing — it submits automatically when correct.<br>
+      Pressing backspace marks a question as trouble, which you can practise later.<br>
+      Start with the default settings below, or customise the number ranges and duration.
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div style="flex:1;min-width:120px;background:#f5f5f0;padding:10px 12px">
+        <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Play</div>
+        <div style="font-size:0.62rem;color:#555;line-height:1.6">Speed drills with your settings. Results and patterns tracked after each game.</div>
+      </div>
+      <div style="flex:1;min-width:120px;background:#f5f5f0;padding:10px 12px">
+        <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Learn</div>
+        <div style="font-size:0.62rem;color:#555;line-height:1.6">500 levels from trivially easy to world-record pace. Unlock levels as you go.</div>
+      </div>
+      <div style="flex:1;min-width:120px;background:#f5f5f0;padding:10px 12px">
+        <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Leaderboard</div>
+        <div style="font-size:0.62rem;color:#555;line-height:1.6">Top scores from players worldwide. Only default settings count.</div>
+      </div>
+    </div>
+  </div>
+
   <div id="config-screen" style="width:100%">
     <div class="section-label">Operations</div>
     <div class="ops-list">
@@ -2137,9 +2874,10 @@ window.retryLearnLevel = retryLearnLevel;
       </div>
     </label>
     <button class="start-btn" onclick="startGame()">Start</button>
+
   </div>
 
-  <div id="game-screen" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;">
+  <div id="game-screen" style="display:none;width:100%;flex-direction:column;align-items:center;">
     <div class="timer-bar-wrap"><div class="timer-bar" id="timer-bar"></div></div>
     <div class="hud">
       <div><div>Time</div><div class="hud-val" id="timer-display">2:00</div></div>
@@ -2196,9 +2934,22 @@ window.retryLearnLevel = retryLearnLevel;
 
 <!-- HISTORY -->
 <div class="page" id="page-history">
-  <div id="alltime-banner" style="width:100%;background:white;border:1px solid #ddd;padding:16px 18px;margin-bottom:16px;display:none">
+  <div id="alltime-banner" style="width:100%;background:white;border:1px solid #ddd;padding:16px 18px;margin-bottom:8px;display:none">
     <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:14px">High scores <span style="font-size:0.5rem;color:#bbb;letter-spacing:1px">(default settings only)</span></div>
     <div id="highscore-rows" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+  <div id="total-correct-banner" style="width:100%;background:white;border:1px solid #ddd;padding:14px 18px;margin-bottom:16px;display:none">
+    <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Total correct answers</div>
+    <div style="font-size:2rem;font-weight:700;letter-spacing:-1px;line-height:1" id="total-correct-val">0</div>
+    <div style="font-size:0.55rem;color:#bbb;margin-top:3px">all time</div>
+  </div>
+  <div id="streak-banner" style="width:100%;background:white;border:1px solid #ddd;padding:14px 18px;margin-bottom:16px;display:none">
+    <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Daily streak</div>
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <div style="font-size:2rem;font-weight:700;letter-spacing:-1px;line-height:1" id="streak-val">0</div>
+      <div style="font-size:1.2rem">&#128293;</div>
+      <div style="font-size:0.62rem;color:#bbb;margin-left:2px" id="streak-sub">days</div>
+    </div>
   </div>
   <div class="history-controls">
     <button class="hist-btn active" onclick="setHistN(this,5)">Last 5</button>
@@ -2209,25 +2960,44 @@ window.retryLearnLevel = retryLearnLevel;
   <div class="graph-wrap"><div class="graph-title">Score over time (2-min equivalent)</div><canvas id="graph-score" height="120"></canvas></div>
   <div class="graph-wrap"><div class="graph-title">Accuracy % over time</div><canvas id="graph-acc" height="120"></canvas></div>
   <div class="graph-wrap"><div class="graph-title">Avg time per answer (s)</div><canvas id="graph-time" height="120"></canvas></div>
+  <!-- ML Skill Profile -->
+  <div id="skill-profile" style="width:100%;background:white;border:1px solid #ddd;padding:16px 18px;margin-bottom:16px;display:none">
+    <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:14px">Operation ability</div>
+    <div id="skill-rows" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
   <div class="section-label" style="margin-top:8px">Game log</div>
   <table class="history-table">
-    <thead><tr><th>#</th><th>Date</th><th>Dur</th><th>Score</th><th>Acc</th><th>Avg time</th></tr></thead>
+    <thead><tr><th>#</th><th>Date</th><th>Dur</th><th>Score</th><th>Acc</th><th>Avg time</th><th></th></tr></thead>
     <tbody id="history-tbody"></tbody>
   </table>
-  <p class="no-history" id="no-history" style="display:none">No games played yet.</p>
+  <div class="no-history" id="no-history" style="display:none"><div style="font-size:1.5rem;margin-bottom:8px">&#9203;</div><div style="font-weight:700;margin-bottom:6px">No games yet</div><div style="font-size:0.6rem;line-height:1.7">Play your first game on the Play tab to start tracking your progress. Your scores, accuracy and average time will appear here.</div></div>
   <button class="btn-outline" style="width:100%;margin-top:4px" onclick="clearHistory()">Clear all history</button>
 </div>
 
 <!-- PRACTISE -->
 <div class="page" id="page-practice">
-  <!-- Patterns section -->
-  <div id="patterns-list" style="width:100%"></div>
-  <p class="no-patterns" id="no-patterns" style="display:none">Play more games to see patterns.</p>
-  <div style="height:16px"></div>
+  <!-- Practice selection — shown when not in a session -->
   <div id="practice-config" style="width:100%">
-    <button class="start-btn" id="practice-start-btn" onclick="startPracticeSession()">Start practice</button>
+
+    <!-- General (ML-driven) -->
+    <div class="section-label">General</div>
+    <div class="pattern-card" style="margin-bottom:8px">
+      <div class="pattern-card-header">
+        <div class="pattern-card-title">Weakest questions</div>
+      </div>
+      <div class="pattern-card-detail">Your 20 most struggled questions based on your skill profile.</div>
+      <button class="pattern-practice-btn" onclick="startMLPractice()">Practice now</button>
+    </div>
+
+    <!-- Patterns (specialised + detected patterns merged) -->
+    <div class="section-label" style="margin-top:16px">Patterns</div>
+    <div id="specialised-list" style="width:100%"></div>
+    <div id="patterns-list" style="width:100%"></div>
+    <p class="no-patterns" id="no-patterns" style="display:none">Play more games to see patterns.</p>
+
   </div>
-  <div id="practice-game" style="display:none;width:100%;display:flex;flex-direction:column;align-items:center;">
+  <div id="practice-game" style="display:none;width:100%;flex-direction:column;align-items:center;">
     <div class="practice-meta">
       <div><div>Question</div><div class="practice-meta-val" id="prac-progress">1/5</div></div>
       <div style="text-align:right"><div>Remaining</div><div class="practice-meta-val" id="prac-remaining">5</div></div>
@@ -2358,7 +3128,17 @@ window.retryLearnLevel = retryLearnLevel;
     <div style="font-size:0.65rem;color:#999;margin-bottom:28px" id="learn-result-sub"></div>
     <button class="start-btn" style="margin-bottom:8px;display:none" id="learn-next-btn" onclick="nextLearnLevel()">Next level</button>
     <button class="start-btn" style="margin-bottom:8px" onclick="retryLearnLevel()">Try again</button>
-    <button class="btn-outline" style="width:100%" onclick="exitLearnGame()">Back to levels</button>
+    <button class="btn-outline" style="width:100%" onclick="goToMap()">Back to levels</button>
+  </div>
+</div>
+<div id="streak-overlay">
+  <div class="streak-popup">
+    <div class="streak-flame">&#128293;</div>
+    <div class="streak-num-slot">
+      <div id="streak-num-old" class="streak-num-item" style="position:absolute;width:100%;text-align:center;opacity:0"></div>
+      <div id="streak-num-new" class="streak-num-item" style="position:absolute;width:100%;text-align:center;opacity:0"></div>
+    </div>
+    <div style="font-size:0.6rem;letter-spacing:3px;text-transform:uppercase;color:#999">day streak</div>
   </div>
 </div>
 </body>
