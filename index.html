@@ -588,7 +588,7 @@ body { background: var(--bg); color: var(--text); }
   #nerdlegame_D_x2 iframe, #nerdlegame_D_x2 > div { margin-left: auto !important; margin-right: 0 !important; }
 }
 @media (max-width: 999px) {
-  .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 8px 20px 14px; text-align: center; }
+  .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 22px 20px 8px; text-align: center; }
 }
 #nerdlegame_M_1 iframe { margin: auto !important; }
 
@@ -3295,9 +3295,6 @@ window.retryLearnLevel = retryLearnLevel;
   <button class="nav-btn" data-page="learn">Learn</button>
 </nav>
 
-<!-- Mobile ad slot — placed at the top, far from the bottom keypad to avoid mis-taps -->
-<div class="mobile-ad"><div id="nerdlegame_M_1"></div></div>
-
 <!-- PLAY -->
 <div class="page active" id="page-play">
   <!-- Intro box — persists above config + game; only the illustration hides during play -->
@@ -3617,6 +3614,9 @@ window.retryLearnLevel = retryLearnLevel;
     <button class="btn-outline" style="width:100%" onclick="goToMap()">Back to levels</button>
   </div>
 </div>
+
+<!-- Mobile ad slot — bottom of content (below the game/status) -->
+<div class="mobile-ad"><div id="nerdlegame_M_1"></div></div>
 
 </div><!-- .app-main -->
 <!-- Desktop right side-rail ad -->
