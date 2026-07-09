@@ -26,7 +26,7 @@
   try { localStorage.setItem('gameType', 'mathlete'); } catch(e) {}
   (function(){
     var isProd = /(^|\.)nerdlegame\.com$/.test(location.hostname);
-    if (!isProd) return; // no ad scripts locally / in dev
+    if (!isProd) { document.documentElement.classList.add('ad-preview'); return; } // dashed slot placeholders locally
     var lng = document.createElement('script');
     lng.defer = true; lng.async = true; lng.src = 'https://lngtd.com/nerdlegame.js';
     document.head.appendChild(lng);
@@ -567,6 +567,24 @@ body { background: var(--bg); color: var(--text); }
   .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 22px 20px 0; text-align: center; }
 }
 #nerdlegame_D_x1 iframe, #nerdlegame_D_x2 iframe, #nerdlegame_M_1 iframe { margin: auto !important; }
+
+/* Local-only ad-slot preview: dashed boxes marking where ads sit (real ads replace them in production) */
+@media (min-width: 1040px) {
+  :root.ad-preview .desktopSideAd {
+    display: flex; align-items: center; justify-content: center;
+    border: 2px dashed var(--accent); border-radius: 8px; overflow: hidden;
+    color: var(--accent); font-family: 'Roboto Mono', monospace; font-size: 0.6rem; letter-spacing: 1px; text-align: center;
+  }
+  :root.ad-preview .desktopSideAd::before { content: 'AD SLOT\A 160 × 600'; white-space: pre; }
+}
+@media (max-width: 1039px) {
+  :root.ad-preview .mobile-ad {
+    display: flex; align-items: center; justify-content: center; min-height: 90px; margin-top: 22px;
+    border: 2px dashed var(--accent); border-radius: 8px;
+    color: var(--accent); font-family: 'Roboto Mono', monospace; font-size: 0.6rem; letter-spacing: 1px; text-align: center;
+  }
+  :root.ad-preview .mobile-ad::before { content: 'AD SLOT · mobile'; }
+}
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
