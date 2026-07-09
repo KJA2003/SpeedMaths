@@ -13,11 +13,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Mathlete — mental maths training by nerdle</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&family=Quicksand:wght@500;600;700&display=swap" rel="stylesheet">
+
+<!-- Ads: same lngtd config as maffdoku; page identifier = mathlete -->
+<script defer async src="https://lngtd.com/nerdlegame.js"></script>
+<script>window.nerdleRealtimeConfig = { page: 'mathlete', sampleRate: 0.3 };</script>
+<script>
+  // window.subdomain is the per-game identifier lngtd + nerdle-realtime.js read
+  // for by-game revenue rollups. Mathlete is a single game, so it's constant.
+  var subdomain = 'mathlete';
+  window.subdomain = subdomain;
+  try { localStorage.setItem('gameType', 'mathlete'); } catch(e) {}
+</script>
+<script src="/mathlete/scripts/nerdle-realtime.js"></script>
+
 <style>
 /* ===== Nerdle brand palette + light/dark theming ===== */
 :root{
   --bg:#f2f2f0; --surface:#ffffff; --text:#161803; --muted:#6f7370;
-  --faint:#a6a8a2; --border:#dcdcd6; --track:#eeeee8;
+  --faint:#8f928d; --border:#dcdcd6; --track:#eeeee8;
   --accent:#820458; --accent-hover:#6a0247; --accent-contrast:#ffffff;
   --green:#398874; --red:#c85a3c; --brand:#820458;
   color-scheme: light dark;
@@ -25,7 +38,7 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#1b2130; --surface:#252d3d; --text:#dfe1e3; --muted:#9aa0ab;
-    --faint:#6b7280; --border:#39424f; --track:#2c3444;
+    --faint:#7e8794; --border:#39424f; --track:#2c3444;
     --accent:#c24d92; --accent-hover:#d466a6; --accent-contrast:#ffffff;
     --green:#4db699; --red:#e07d63; --brand:#e987be;
   }
@@ -267,21 +280,10 @@ canvas { width: 100%; display: block; }
    ============================================================ */
 body { background: var(--bg); color: var(--text); }
 
-/* Brand header */
+/* Brand header — hamburger + theme toggle on the left, wordmark on the right */
 .site-header {
   width: 100%; max-width: 520px; display: flex; align-items: center;
-  gap: 10px; padding: 14px 20px 10px;
-}
-.brand-mark {
-  display: flex; align-items: baseline; gap: 1px; text-decoration: none;
-  font-family: 'Quicksand', sans-serif; font-weight: 700;
-  font-size: 1.5rem; letter-spacing: -0.5px; line-height: 1;
-}
-.brand-mark .m-word { color: var(--brand); }
-.brand-mark .m-dot { color: var(--faint); font-family: 'Times New Roman', serif; }
-.brand-sub {
-  font-family: 'Roboto Mono', monospace; font-size: 0.5rem; letter-spacing: 2px;
-  text-transform: uppercase; color: var(--muted); margin-left: 2px; align-self: center;
+  gap: 4px; padding: 14px 20px 10px;
 }
 .header-spacer { flex: 1; }
 .icon-btn {
@@ -289,11 +291,26 @@ body { background: var(--bg); color: var(--text); }
   display: flex; align-items: center; justify-content: center;
 }
 .icon-btn svg { display: block; }
+.brand-block {
+  display: flex; flex-direction: column; align-items: flex-end;
+  text-decoration: none; line-height: 1.05;
+}
+.brand-mark {
+  font-family: 'Quicksand', sans-serif; font-weight: 700;
+  font-size: 1.55rem; letter-spacing: -0.5px;
+}
+.brand-mark .m-word { color: var(--brand); }
+.brand-mark .m-dot { color: var(--faint); font-family: 'Times New Roman', serif; }
+.brand-sub {
+  font-family: 'Roboto Mono', monospace; font-size: 0.6rem; letter-spacing: 1px;
+  text-transform: none; color: var(--muted); margin-top: 5px;
+}
 
 /* Nav */
 .nav { background: var(--bg); border-bottom-color: var(--border); margin-bottom: 28px; }
-.nav-btn { color: var(--faint); }
+.nav-btn { color: var(--muted); }
 .nav-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.nav-btn.nav-locked { opacity: 0.5; pointer-events: auto; cursor: help; }
 
 /* Surfaces & cards */
 .op-row, .dur-btn, .toggle-row, .stat, .chart-wrap, .graph-wrap,
@@ -415,6 +432,71 @@ body { background: var(--bg); color: var(--text); }
   font-size: 0.7rem; font-family: 'Quicksand', sans-serif; font-weight: 600;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* Menu top-section tiles (two-column) */
+.menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 8px; }
+.menu-tile {
+  display: flex; align-items: center; gap: 9px; padding: 12px 10px; cursor: pointer;
+  color: var(--text); font-size: 0.78rem; text-decoration: none; border-radius: 8px;
+  background: var(--track); font-family: 'Roboto Mono', monospace;
+}
+.menu-tile:hover { background: var(--border); }
+.menu-tile .mi-ico { display: flex; align-items: center; font-size: 1rem; }
+.menu-tile .mi-ico img { display: block; border-radius: 4px; }
+.menu-game-glyph {
+  width: 26px; height: 26px; border-radius: 6px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; background: var(--track); border: 1px solid var(--border);
+}
+.menu-privacy {
+  display: block; text-align: center; margin-top: 24px; padding-top: 16px;
+  border-top: 1px solid var(--border); font-size: 0.64rem; color: var(--muted); text-decoration: none;
+}
+.menu-privacy:hover { text-decoration: underline; }
+
+/* Locked-tab hint toast */
+#nav-hint {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(8px);
+  background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 999px;
+  font-family: 'Roboto Mono', monospace; font-size: 0.68rem; z-index: 10000;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; white-space: nowrap;
+}
+#nav-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* Bigger nav tab labels */
+.nav-btn { font-size: 0.66rem; letter-spacing: 0.5px; padding: 15px 2px; }
+
+/* Explanatory / label text bumped up a touch for readability */
+.section-label { font-size: 0.66rem; }
+.range-inline { font-size: 0.72rem; }
+.toggle-row-sub { font-size: 0.68rem; }
+.hud { font-size: 0.64rem; }
+.result-label { font-size: 0.66rem; }
+.result-sub { font-size: 0.78rem; }
+.chart-title, .graph-title { font-size: 0.64rem; }
+.stat-key { font-size: 0.6rem; }
+.chart-count { font-size: 0.6rem; }
+.pattern-card-detail { font-size: 0.68rem; }
+.practice-tag { font-size: 0.6rem; }
+.practice-meta { font-size: 0.64rem; }
+.history-table { font-size: 0.68rem; }
+.history-table th { font-size: 0.6rem; }
+.no-history, .no-patterns { font-size: 0.72rem; }
+
+/* ===== Ad slots (same units as maffdoku: side rails on desktop, M_1 on mobile) ===== */
+.desktopSideAd { display: none; }
+.mobile-ad { display: none; }
+@media (min-width: 1040px) {
+  .desktopSideAd {
+    display: block; position: fixed; top: 84px; width: 160px; min-height: 600px; z-index: 6;
+  }
+  .desktopSideAd.left  { right: calc(50% + 280px); }
+  .desktopSideAd.right { left:  calc(50% + 280px); }
+}
+@media (max-width: 1039px) {
+  .mobile-ad { display: block; width: 100%; max-width: 520px; padding: 22px 20px 0; text-align: center; }
+}
+#nerdlegame_D_x1 iframe, #nerdlegame_D_x2 iframe, #nerdlegame_M_1 iframe { margin: auto !important; }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -497,8 +579,22 @@ function getUserId() {
 // ================================================================
 // NAV
 // ================================================================
+var _navHintTimer = null;
+function showNavHint(btn) {
+  var msg = btn.getAttribute('title') || 'Locked';
+  var t = document.getElementById('nav-hint');
+  if (!t) { t = document.createElement('div'); t.id = 'nav-hint'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('show');
+  if (_navHintTimer) clearTimeout(_navHintTimer);
+  _navHintTimer = setTimeout(function() { t.classList.remove('show'); }, 1900);
+}
+
 document.querySelectorAll('.nav-btn').forEach(function(btn) {
-  btn.addEventListener('click', function() { showPage(btn.dataset.page); });
+  btn.addEventListener('click', function() {
+    if (btn.classList.contains('nav-locked')) { showNavHint(btn); return; }
+    showPage(btn.dataset.page);
+  });
 });
 
 function showPage(name) {
@@ -779,6 +875,10 @@ document.getElementById('answer-input').addEventListener('input', function() {
 // ================================================================
 function endGame() {
   clearInterval(timerInterval); stopPaceTicker(); accepting = false;
+
+  // Refresh ads when the game finishes (results shown) — same trigger maffdoku
+  // uses on its win/lose modals.
+  try { if (window.lngtd && window.lngtd.resetAndRunAuction) window.lngtd.resetAndRunAuction(); } catch(e) {}
 
   var opAvg = {};
   for (var op in opData) {
@@ -2484,9 +2584,9 @@ function updateFirstTimeState() {
   var historyBtn = document.querySelector('.nav-btn[data-page="history"]');
   var practiseBtn = document.querySelector('.nav-btn[data-page="practice"]');
 
-  if (resultsBtn) resultsBtn.classList.toggle('nav-locked', !hasGames);
-  if (historyBtn) historyBtn.classList.toggle('nav-locked', !hasGames);
-  if (practiseBtn) practiseBtn.classList.toggle('nav-locked', !hasTwoGames);
+  if (resultsBtn)  { resultsBtn.classList.toggle('nav-locked', !hasGames);  resultsBtn.title  = hasGames    ? '' : 'Unlocked after 1 game'; }
+  if (historyBtn)  { historyBtn.classList.toggle('nav-locked', !hasGames);  historyBtn.title  = hasGames    ? '' : 'Unlocked after 1 game'; }
+  if (practiseBtn) { practiseBtn.classList.toggle('nav-locked', !hasTwoGames); practiseBtn.title = hasTwoGames ? '' : 'Unlocked after 2 games'; }
 }
 
 
@@ -3018,18 +3118,19 @@ window.retryLearnLevel = retryLearnLevel;
 </head>
 <body>
 
+<!-- Desktop side-rail ads (lngtd fills these; hidden below 1040px) -->
+<div class="desktopSideAd left"><div id="nerdlegame_D_x1"></div></div>
+<div class="desktopSideAd right"><div id="nerdlegame_D_x2"></div></div>
+
 <header class="site-header">
-  <a class="brand-mark" href="https://www.nerdlegame.com" aria-label="Mathlete by nerdle">
-    <span class="m-word">mathlete</span><span class="m-dot">.</span>
-  </a>
-  <span class="brand-sub">brain&nbsp;training</span>
-  <span class="header-spacer"></span>
-  <button class="icon-btn" id="theme-toggle" aria-label="Toggle dark mode" onclick="toggleTheme()">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
-  </button>
   <button class="icon-btn" aria-label="Menu" onclick="openMenu()">
     <svg width="22" height="16" viewBox="0 0 24 17" fill="currentColor" aria-hidden="true"><path d="M0 16.07V13.4h24v2.67H0zM0 9.4V6.74h24V9.4H0zM0 2.74V.07h24v2.67H0z"></path></svg>
   </button>
+  <span class="header-spacer"></span>
+  <a class="brand-block" href="https://www.nerdlegame.com" aria-label="Mathlete by nerdle">
+    <span class="brand-mark"><span class="m-word">mathlete</span><span class="m-dot">.</span></span>
+    <span class="brand-sub">nerdle brain training</span>
+  </a>
 </header>
 
 <nav class="nav">
@@ -3044,27 +3145,24 @@ window.retryLearnLevel = retryLearnLevel;
 <!-- PLAY -->
 <div class="page active" id="page-play">
   <!-- First-time welcome banner -->
-  <div id="welcome-banner" style="display:none;width:100%;background:white;border:1px solid #ddd;padding:20px 18px;margin-bottom:20px;position:relative">
-    <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.1rem;cursor:pointer;color:#bbb;line-height:1;padding:0" title="Dismiss">&times;</button>
-    <div style="font-size:1.1rem;font-weight:700;margin-bottom:8px">Welcome to Alkaliner</div>
-    <div style="font-size:0.65rem;color:#888;line-height:1.8;margin-bottom:12px">
-      A mental arithmetic speed drill. Answer as many questions as you can before time runs out.<br>
-      <strong style="color:#111">How to play:</strong> type your answer and press nothing — it submits automatically when correct.<br>
-      Pressing backspace marks a question as trouble, which you can practise later.<br>
-      Start with the default settings below, or customise the number ranges and duration.
+  <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:20px 18px;margin-bottom:20px;position:relative">
+    <button onclick="dismissWelcome()" style="position:absolute;top:12px;right:14px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
+    <div style="font-size:1.2rem;font-weight:700;margin-bottom:8px;color:var(--text)">Welcome to Mathlete</div>
+    <div style="font-size:0.8rem;color:var(--muted);line-height:1.7;margin-bottom:14px">
+      A mental-maths speed drill: type your answer and it submits the moment it's right. Backspace flags a question to practise later. Pick your operations and duration, then hit Start.
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <div style="flex:1;min-width:120px;background:#f5f5f0;padding:10px 12px">
-        <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Play</div>
-        <div style="font-size:0.62rem;color:#555;line-height:1.6">Speed drills with your settings. Results and patterns tracked after each game.</div>
+      <div style="flex:1;min-width:120px;background:var(--track);padding:11px 12px;border-radius:6px">
+        <div style="font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Play</div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.55">Speed drills with your settings; weak-spot patterns tracked.</div>
       </div>
-      <div style="flex:1;min-width:120px;background:#f5f5f0;padding:10px 12px">
-        <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Learn</div>
-        <div style="font-size:0.62rem;color:#555;line-height:1.6">500 levels from trivially easy to world-record pace. Unlock levels as you go.</div>
+      <div style="flex:1;min-width:120px;background:var(--track);padding:11px 12px;border-radius:6px">
+        <div style="font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Learn</div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.55">500 levels, trivially easy to world-record pace.</div>
       </div>
-      <div style="flex:1;min-width:120px;background:#f5f5f0;padding:10px 12px">
-        <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Leaderboard</div>
-        <div style="font-size:0.62rem;color:#555;line-height:1.6">Top scores from players worldwide. Only default settings count.</div>
+      <div style="flex:1;min-width:120px;background:var(--track);padding:11px 12px;border-radius:6px">
+        <div style="font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Leaderboard</div>
+        <div style="font-size:0.72rem;color:var(--muted);line-height:1.55">Global top scores. Default settings only.</div>
       </div>
     </div>
   </div>
@@ -3083,7 +3181,7 @@ window.retryLearnLevel = retryLearnLevel;
       </div>
       <div class="op-row active" data-op="subtraction" onclick="toggleOp(event,this)">
         <div class="op-check">&#10003;</div><div class="op-label">Subtraction</div>
-        <div class="range-inline" style="color:#ccc">Addition in reverse.</div>
+        <div class="range-inline" style="color:var(--muted)">Addition in reverse.</div>
       </div>
       <div class="op-row active" data-op="multiplication" onclick="toggleOp(event,this)">
         <div class="op-check">&#10003;</div><div class="op-label">Multiplication</div>
@@ -3096,7 +3194,7 @@ window.retryLearnLevel = retryLearnLevel;
       </div>
       <div class="op-row active" data-op="division" onclick="toggleOp(event,this)">
         <div class="op-check">&#10003;</div><div class="op-label">Division</div>
-        <div class="range-inline" style="color:#ccc">Multiplication in reverse.</div>
+        <div class="range-inline" style="color:var(--muted)">Multiplication in reverse.</div>
       </div>
     </div>
     <div class="section-label">Duration</div>
@@ -3376,6 +3474,9 @@ window.retryLearnLevel = retryLearnLevel;
     <button class="btn-outline" style="width:100%" onclick="goToMap()">Back to levels</button>
   </div>
 </div>
+<!-- Mobile bottom ad slot (lngtd fills this; hidden on desktop) -->
+<div class="mobile-ad"><div id="nerdlegame_M_1"></div></div>
+
 <div id="streak-overlay">
   <div class="streak-popup">
     <div class="streak-flame">&#128293;</div>
@@ -3397,17 +3498,17 @@ window.retryLearnLevel = retryLearnLevel;
     </button>
   </div>
 
-  <div class="menu-item" role="button" tabindex="0" onclick="showPage('history');closeMenu();"><span class="mi-ico">📊</span> Statistics</div>
-  <div class="menu-item" role="button" tabindex="0" onclick="shareMathlete();"><span class="mi-ico">🔗</span> Share</div>
-  <div class="menu-item" role="button" tabindex="0" onclick="toggleTheme();"><span class="mi-ico">🌗</span> Dark mode</div>
-
-  <div class="menu-divider"></div>
-
-  <a class="menu-item" href="https://www.nerdlegame.com"><span class="mi-ico"><img src="https://nerdlegame.com/logo192.png" width="20" height="20" alt=""></span> nerdle HQ</a>
-  <a class="menu-item" href="https://www.nerdlegame.com/privacy.html"><span class="mi-ico">🔒</span> Privacy policy</a>
+  <div class="menu-grid">
+    <div class="menu-tile" role="button" tabindex="0" onclick="showPage('history');closeMenu();"><span class="mi-ico">📊</span> Statistics</div>
+    <div class="menu-tile" role="button" tabindex="0" onclick="shareMathlete();"><span class="mi-ico">🔗</span> Share</div>
+    <div class="menu-tile" role="button" tabindex="0" onclick="toggleTheme();"><span class="mi-ico">🌗</span> Dark mode</div>
+    <a class="menu-tile" href="https://www.nerdlegame.com"><span class="mi-ico"><img src="https://nerdlegame.com/logo192.png" width="18" height="18" alt=""></span> nerdle HQ</a>
+  </div>
 
   <div class="menu-section-title">nerdleverse games</div>
   <div id="menu-games-host"><div class="menu-group-title">Loading games…</div></div>
+
+  <a class="menu-privacy" href="https://www.nerdlegame.com/privacy.html">Privacy policy</a>
 </aside>
 
 <script>
@@ -3442,15 +3543,31 @@ window.retryLearnLevel = retryLearnLevel;
     closeMenu();
   };
 
+  function glyphChar(g){
+    if (g.tile && g.tile.glyph) return g.tile.glyph;
+    return (g.name || '?').trim().charAt(0).toUpperCase();
+  }
+  function glyphBox(g){
+    var d = document.createElement('span');
+    d.className = 'menu-game-glyph';
+    d.textContent = glyphChar(g);
+    return d;
+  }
   function tile(g){
     var a = document.createElement('a');
     a.className = 'menu-game'; a.href = g.url;
-    var img = document.createElement('img');
-    img.src = g.img; img.alt = ''; img.loading = 'lazy';
-    img.onerror = function(){ this.style.visibility = 'hidden'; };
+    var icon;
+    if (g.img){
+      icon = document.createElement('img');
+      icon.src = g.img; icon.alt = ''; icon.loading = 'lazy';
+      // Broken/missing icon → fall back to a glyph box rather than a blank gap.
+      icon.onerror = function(){ if (icon.parentNode === a) a.replaceChild(glyphBox(g), icon); };
+    } else {
+      icon = glyphBox(g);  // games that ship a tile glyph instead of an image (e.g. wordGPT)
+    }
     var name = document.createElement('span');
     name.className = 'menu-game-name'; name.textContent = g.name;
-    a.appendChild(img); a.appendChild(name);
+    a.appendChild(icon); a.appendChild(name);
     return a;
   }
 
