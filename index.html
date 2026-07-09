@@ -454,14 +454,16 @@ body { background: var(--bg); color: var(--text); }
 }
 .menu-privacy:hover { text-decoration: underline; }
 
-/* Locked-tab hint toast */
+/* Locked-tab hint toast — positioned under the clicked tab by JS */
 #nav-hint {
-  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(8px);
-  background: var(--text); color: var(--bg); padding: 9px 16px; border-radius: 999px;
-  font-family: 'Roboto Mono', monospace; font-size: 0.68rem; z-index: 10000;
-  opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease; white-space: nowrap;
+  position: fixed; top: 0; left: 0; transform: translateX(-50%);
+  background: var(--accent); color: var(--accent-contrast);
+  padding: 7px 14px; border-radius: 8px;
+  font-family: 'Roboto Mono', monospace; font-size: 0.66rem; z-index: 10000;
+  opacity: 0; pointer-events: none; transition: opacity 0.18s ease; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
 }
-#nav-hint.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+#nav-hint.show { opacity: 1; }
 
 /* Bigger nav tab labels */
 .nav-btn { font-size: 0.66rem; letter-spacing: 0.5px; padding: 15px 2px; }
@@ -585,6 +587,9 @@ function showNavHint(btn) {
   var t = document.getElementById('nav-hint');
   if (!t) { t = document.createElement('div'); t.id = 'nav-hint'; document.body.appendChild(t); }
   t.textContent = msg;
+  var r = btn.getBoundingClientRect();
+  t.style.left = (r.left + r.width / 2) + 'px';
+  t.style.top  = (r.bottom + 8) + 'px';
   t.classList.add('show');
   if (_navHintTimer) clearTimeout(_navHintTimer);
   _navHintTimer = setTimeout(function() { t.classList.remove('show'); }, 1900);
