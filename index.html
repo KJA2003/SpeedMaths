@@ -2032,9 +2032,26 @@ function closeModal() {
   if (_pendingStreakN) { var sn = _pendingStreakN; _pendingStreakN = 0; showStreakAnimation(sn); }
 }
 
-var BLOCKED_WORDS = ['fuck','shit','cunt','cock','dick','pussy','ass','bitch','bastard','wank','twat','piss','slut','whore','nigger','nigga','faggot','retard','rape','university of birmingham','univ of birmingham'];
+var BLOCKED_WORDS = [
+  // sexual / anatomical
+  'fuck','shit','cunt','cock','dick','pussy','penis','vagina','cum','jizz','spunk',
+  'clit','dildo','anal','arse','prick','knob','wank','twat','piss','tit','tits','boob',
+  'bollock','bugger','shag','sex','porn','milf','thot','slut','whore','skank','slag',
+  'nonce','pedo','paedo','rape','rapist','molest','horny','orgy','semen',
+  // slurs
+  'nigger','nigga','faggot','fag','retard','spastic','homo','coon','spic','chink',
+  'paki','kike','wog','dyke','tranny','kkk','nazi','hitler',
+  // insults
+  'bitch','bastard','dickhead','asshole','arsehole','wanker','tosser','bellend',
+  'bullshit','dumbass','ass',
+  // original house entries (kept)
+  'university of birmingham','univ of birmingham'
+];
+// Normalise common leetspeak (p3nis, sh1t, a55) before substring-matching.
 function containsBlockedWord(s) {
-  var lower = s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  var lower = s.toLowerCase().replace(/[^a-z0-9]/g, '')
+    .replace(/0/g,'o').replace(/1/g,'i').replace(/3/g,'e')
+    .replace(/4/g,'a').replace(/5/g,'s').replace(/7/g,'t').replace(/8/g,'b');
   return BLOCKED_WORDS.some(function(w) {
     return lower.indexOf(w) !== -1;
   });
