@@ -2016,6 +2016,17 @@ function showScoreModal(score, duration) {
 }
 
 function closeModal() {
+  // Remember a validly-typed handle even if they Skip submitting — so we ask once, ever.
+  if (!getUsername()) {
+    var createEl = document.getElementById('uname-create');
+    if (createEl && createEl.style.display !== 'none') {
+      var hi = document.getElementById('handle-input');
+      var handle = hi ? hi.value.trim() : '';
+      if (/^[A-Za-z0-9]{1,5}$/.test(handle) && !containsBlockedWord(handle)) {
+        try { localStorage.setItem('mathlete_username', makeUsername(handle)); } catch(e) {}
+      }
+    }
+  }
   document.getElementById('name-modal').style.display = 'none';
   _submitFn = null;
   if (_pendingStreakN) { var sn = _pendingStreakN; _pendingStreakN = 0; showStreakAnimation(sn); }
