@@ -3137,6 +3137,7 @@ function logQuestion(op, a, b, correct, elapsedMs, gamePos, timeLeft, dur) {
     device_id:     getDeviceId(),   // persistent anonymous per-device id
     session_id:    currentSessionId, // this game's id (groups its answers)
     user_id:       getUserId(),      // nerdle account id when logged in, else null
+    username:      getUsername() || null, // chosen leaderboard handle (HANDLE_xxxxxx), null until set
     client_ts:     Date.now(),       // client timestamp (epoch ms)
     op:            op,
     a:             a,
