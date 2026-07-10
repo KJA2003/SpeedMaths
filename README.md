@@ -103,27 +103,70 @@ Project: `xlsyaqvkziurxzqgbqps` — the anon key is embedded in `index.html`
 ```
 op, a, b, correct, elapsed_ms, game_position, time_pressure,
 units_a, units_b, has_prime, has_carry, mag_a, mag_b,
-device_id, session_id, user_id, client_ts        -- identifiers
+device_id, session_id, user_id, username, client_ts, created_at   -- identifiers
 ```
 
 - `device_id` — persistent anonymous per-device UUID (groups a person's answers
-  while logged out).
+  while logged out). **Note:** a browser tab and the installed PWA have separate
+  `localStorage`, so one person can appear as two `device_id`s / handles until login.
 - `session_id` — fresh per game (groups a single sitting).
 - `user_id` — nerdle account id; `null` until login is wired, then auto-filled.
+- `username` — the chosen leaderboard handle (`HANDLE_xxxxxx`); `null` until the
+  player sets one. Only captured from the game *after* the handle exists, so a
+  brand-new player's very first game logs `null`.
 - `client_ts` — client `Date.now()` epoch-ms per answer.
+- `created_at` — server timestamp (`timestamptz`); prefer this for date filtering.
 
-Migration that added the identifier columns:
+Migrations that added the identifier columns:
 ```sql
 alter table question_log
   add column if not exists device_id  text,
   add column if not exists session_id text,
   add column if not exists user_id    text,
   add column if not exists client_ts  bigint;
+-- later:
+alter table question_log add column if not exists username text;
+create index if not exists question_log_username_idx on question_log (username);
 ```
 
 > Note: `correct = false` is logged on the first *backspace* (a hesitation /
 > self-correction), not a wrong submission — the game only advances on a correct
 > answer. Kept intentionally.
+
+### Querying / analysing the data
+
+The embedded anon key is effectively **write-mostly**: RLS lets clients INSERT
+question rows and read the `leaderboard`, but **`question_log` SELECT is blocked**
+for the anon role (it's raw training data). A read with the anon key returns an
+empty array (HTTP 200), *not* an error — so "0 rows" from the client does **not**
+mean the table is empty.
+
+To read/analyse it (or run migrations) you need a privileged credential — keep it
+**outside this repo**, never commit or deploy it (the anon key belongs in
+`index.html`; these do not):
+
+- **Supabase SQL editor** (dashboard) — quickest for ad-hoc queries; runs as the
+  service role and bypasses RLS.
+- **Management API** — run arbitrary SQL (including DDL) from a script/CLI:
+  ```bash
+  curl -s "https://api.supabase.com/v1/projects/xlsyaqvkziurxzqgbqps/database/query" \
+    -H "Authorization: Bearer $SUPABASE_PAT" \
+    -H "Content-Type: application/json" \
+    -d '{"query":"select count(distinct session_id) as games from question_log;"}'
+  ```
+  `SUPABASE_PAT` is a **personal access token** from supabase.com → Account →
+  Access Tokens (account-scoped, revocable). Store it in an env file outside the
+  repo (e.g. under `~/.claude/…`), not in the tree.
+
+Example — unique users and games per hour since a date:
+```sql
+select date_trunc('hour', created_at) as hour,
+       count(distinct device_id)  as users,
+       count(distinct session_id) as games
+from question_log
+where created_at >= '2026-07-09'
+group by 1 order by 1;
+```
 
 ### localStorage keys
 ```
@@ -131,7 +174,8 @@ arith_v3           Game history + trouble questions + totalCorrect
 arith_skills       On-device skill model (θ per skill key)
 arith_learn        Learn-mode level progress + stars
 arith_pace         Pace-bar preference
-arith_name         Leaderboard display name
+arith_name         Legacy free-text leaderboard name (old build)
+mathlete_username  Leaderboard handle (HANDLE_xxxxxx); set once, editable
 mathlete_device_id Persistent anonymous device id (ML logging)
 mathlete_user_id   Cached nerdle account id (set once login is wired)
 mathlete_theme     'light' | 'dark' manual theme override
