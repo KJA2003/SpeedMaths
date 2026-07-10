@@ -1886,6 +1886,9 @@ var SUPA_URL = 'https://xlsyaqvkziurxzqgbqps.supabase.co';
 var SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhsc3lhcXZreml1cnh6cWdicXBzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NDU3NzEsImV4cCI6MjA4OTMyMTc3MX0.iq1laJ0pMdgpOj4bPWq8ZDIuW8-Kz_-uaM6Nq0HMguQ';
 var lbWindow = 'day';
 var lbDur = 120;
+// Min distinct players before a leaderboard is shown (sparse boards look dead).
+// Exception: a board is always shown to a player who is on it themselves.
+var LB_MIN_PLAYERS = 5;
 // Score submission uses a closure — _pendingScore is NOT accessible from console
 var _submitFn = null;
 var _pendingStreakN = 0;
@@ -1936,10 +1939,19 @@ function loadLeaderboard() {
       document.getElementById('lb-empty').textContent = 'Nothing to show here yet.';
       return;
     }
+    var myName = localStorage.getItem('mathlete_username') || '';
+    var myLower = myName.toLowerCase();
+    var people = {}; rows.forEach(function(r) { if (r && r.name) people[r.name.toLowerCase()] = 1; });
+    var iAmOnIt = myLower && people[myLower];
+    // Hide sparse boards (they read as "nobody plays this") unless the viewer is on it
+    if (!rows.length || (Object.keys(people).length < LB_MIN_PLAYERS && !iAmOnIt)) {
+      var e = document.getElementById('lb-empty');
+      e.style.display = 'block';
+      e.textContent = rows.length ? 'Not enough players yet — be one of the first to top this board.' : 'No scores yet for this period.';
+      return;
+    }
     rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 10);
     var list = document.getElementById('lb-list');
-    var myName = localStorage.getItem('mathlete_username') || '';
-    if (!rows.length) { document.getElementById('lb-empty').style.display = 'block'; return; }
     rows.forEach(function(row, i) {
       var el = document.createElement('div'); el.className = 'lb-row';
       var isYou = myName && row.name.toLowerCase() === myName.toLowerCase();
@@ -1978,7 +1990,7 @@ function setUnameMode(mode){
 }
 function updateUnamePreview(){
   var el = document.getElementById('handle-input'); if (!el) return;
-  var h = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 5);
+  var h = el.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
   if (el.value !== h) el.value = h;   // enforce format as they type
   var p = document.getElementById('uname-preview');
   if (p) p.textContent = h ? (h + '_xxxxxx') : '';
@@ -2022,7 +2034,7 @@ function closeModal() {
     if (createEl && createEl.style.display !== 'none') {
       var hi = document.getElementById('handle-input');
       var handle = hi ? hi.value.trim() : '';
-      if (/^[A-Za-z0-9]{1,5}$/.test(handle) && !containsBlockedWord(handle)) {
+      if (/^[A-Za-z0-9]{1,3}$/.test(handle) && !containsBlockedWord(handle)) {
         try { localStorage.setItem('mathlete_username', makeUsername(handle)); } catch(e) {}
       }
     }
@@ -2032,7 +2044,12 @@ function closeModal() {
   if (_pendingStreakN) { var sn = _pendingStreakN; _pendingStreakN = 0; showStreakAnimation(sn); }
 }
 
+// Profanity blocklist. Handles are max 3 chars, so short entries below do the
+// real work; longer entries also guard the server-side check (which shares this
+// list). To add a banned handle later, just append a lowercase word here.
 var BLOCKED_WORDS = [
+  // short / leetspeak forms (the main line of defence for 3-char handles)
+  'fuk','fuc','fck','fuq','cok','dik','cnt','jiz','fgt','gsh',
   // sexual / anatomical
   'fuck','shit','cunt','cock','dick','pussy','penis','vagina','cum','jizz','spunk',
   'clit','dildo','anal','arse','prick','knob','wank','twat','piss','tit','tits','boob',
@@ -2065,8 +2082,8 @@ function submitScore() {
   if (creating) {
     var hi = document.getElementById('handle-input');
     var handle = hi.value.trim();
-    if (!/^[A-Za-z0-9]{1,5}$/.test(handle)) {
-      hi.style.borderBottomColor = 'var(--red)'; hi.placeholder = '1–5 letters or numbers'; return;
+    if (!/^[A-Za-z0-9]{1,3}$/.test(handle)) {
+      hi.style.borderBottomColor = 'var(--red)'; hi.placeholder = '1–3 letters or numbers'; return;
     }
     if (containsBlockedWord(handle)) {
       hi.style.borderBottomColor = 'var(--red)'; hi.value = ''; hi.placeholder = 'Choose a different handle';
@@ -2825,8 +2842,16 @@ function loadPlayLeaderboard() {
       loading.textContent = 'No scores yet.';
       return;
     }
-    rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 5);
     var myName = localStorage.getItem('mathlete_username') || '';
+    var myLower = myName.toLowerCase();
+    var people = {}; rows.forEach(function(r) { if (r && r.name) people[r.name.toLowerCase()] = 1; });
+    var iAmOnIt = myLower && people[myLower];
+    if (Object.keys(people).length < LB_MIN_PLAYERS && !iAmOnIt) {
+      loading.style.display = 'block';
+      loading.textContent = 'Not enough players yet — play to get on the board.';
+      return;
+    }
+    rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 5);
     rows.forEach(function(row, i) {
       var el = document.createElement('div');
       el.className = 'lb-row';
@@ -3672,8 +3697,8 @@ window.retryLearnLevel = retryLearnLevel;
     <div style="font-size:0.65rem;color:var(--muted);margin-bottom:20px" id="modal-sub"></div>
 
     <div id="uname-create">
-      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:8px">Choose a handle (1–5 letters/numbers)</div>
-      <input id="handle-input" type="text" maxlength="5" placeholder="e.g. SKY" autocomplete="off" spellcheck="false" oninput="updateUnamePreview()"
+      <div style="font-size:0.62rem;color:var(--muted);margin-bottom:8px">Choose a handle (1–3 letters/numbers)</div>
+      <input id="handle-input" type="text" maxlength="3" placeholder="e.g. SKY" autocomplete="off" spellcheck="false" oninput="updateUnamePreview()"
         style="width:100%;border:none;border-bottom:2px solid var(--accent);font-family:'Roboto Mono',monospace;font-size:1.3rem;font-weight:700;letter-spacing:3px;text-align:center;text-transform:uppercase;padding:8px 0;outline:none;background:transparent;color:var(--text)">
       <div id="uname-preview" style="font-family:'Roboto Mono',monospace;font-size:0.72rem;color:var(--muted);margin:8px 0 18px;min-height:1em"></div>
       <button onclick="submitScore()" style="width:100%;padding:12px;background:var(--accent);color:var(--accent-contrast);border:none;font-family:'Roboto Mono',monospace;font-size:0.8rem;font-weight:700;letter-spacing:2px;text-transform:uppercase;cursor:pointer;margin-bottom:8px">Create &amp; submit</button>
