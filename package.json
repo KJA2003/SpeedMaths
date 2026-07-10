@@ -5,7 +5,7 @@
   "private": true,
   "description": "Mathlete — mental maths training by nerdle",
   "scripts": {
-    "deploySub": "aws s3 sync . s3://nerdle-serverless-app/mathlete --acl public-read --exclude \".git/*\" --exclude \".claude/*\" --exclude \"node_modules/*\" --exclude \"scratchpad/*\" --exclude \"*.md\" --exclude \"package.json\" --exclude \"package-lock.json\"",
+    "deploySub": "aws s3 sync . s3://nerdle-serverless-app/mathlete --acl public-read --exclude \".git/*\" --exclude \".claude/*\" --exclude \"node_modules/*\" --exclude \"scratchpad/*\" --exclude \"*.md\" --exclude \"package.json\" --exclude \"package-lock.json\" --exclude \"index.html\" && aws s3 cp index.html s3://nerdle-serverless-app/mathlete/index.html --acl public-read --content-type \"text/html\" --cache-control \"no-cache\"",
     "invalidateSub": "aws cloudfront create-invalidation --distribution-id E2GV7CU2G3KWL8 --paths \"/mathlete/*\" \"/mathlete\"",
     "deployRealtime": "aws s3 cp scripts/nerdle-realtime.js s3://nerdle-serverless-app/mathlete/scripts/nerdle-realtime.js --acl public-read --content-type application/javascript --cache-control \"max-age=300\"",
     "invalidateRealtime": "aws cloudfront create-invalidation --distribution-id E2GV7CU2G3KWL8 --paths \"/mathlete/scripts/nerdle-realtime.js\"",
