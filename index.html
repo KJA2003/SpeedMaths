@@ -2194,8 +2194,27 @@ function _svIsPwa() { try { return (window.matchMedia && window.matchMedia('(dis
 function _svDeviceClass() { try { var ua = navigator.userAgent || ''; if (/iPad|Tablet/i.test(ua) || (window.innerWidth >= 768 && /Mobile/i.test(ua))) return 'tablet'; if (/Mobi|Android|iPhone|iPod/i.test(ua)) return 'mobile'; return 'desktop'; } catch (e) { return 'unknown'; } }
 function _svGamesPlayedTotal() { try { var d = loadData(); return (d && d.games) ? d.games.length : 0; } catch (e) { return 0; } }
 
+function _svReadJson(key) { try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
+function _svNum(v) { return typeof v === 'number' ? v : null; }
+// SHA-256 hex of the nerdle login token — a stable per-account join key that
+// never exposes the raw token. Resolves null if crypto.subtle is unavailable.
+function _svSha256(text) {
+  try {
+    if (!text || !(window.crypto && crypto.subtle)) return Promise.resolve(null);
+    return crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    }).catch(function () { return null; });
+  } catch (e) { return Promise.resolve(null); }
+}
+
+// Returns a Promise (the nerdle token hash is async). Reads shared, same-origin
+// nerdle localStorage — works for logged-in AND anonymous players.
 function collectSurveyHidden() {
   var g = _lastGameMeta || {};
+  var nerdle = _svReadJson('statsState') || {};              // nerdle classic stats
+  var lastPlayed = _svReadJson('lastPlayed') || {};          // cross-game recency map
+  var lblToken = ''; try { lblToken = localStorage.getItem('lbl_token') || ''; } catch (e) {}
+  var lpDates = []; if (lastPlayed && typeof lastPlayed === 'object') { for (var k in lastPlayed) { if (typeof lastPlayed[k] === 'string') lpDates.push(lastPlayed[k]); } }
   var h = {
     gameType: 'mathlete',
     mode: g.mode || 'play',
@@ -2210,6 +2229,15 @@ function collectSurveyHidden() {
     device_id: getDeviceId(),
     session_id: (typeof currentSessionId !== 'undefined' ? currentSessionId : null),
     ga_client_id: _svGaClientId(),
+    // nerdle ecosystem signals (shared same-origin localStorage)
+    is_registered: !!lblToken,
+    nerdle_classic_games_played: _svNum(nerdle.gamesPlayed),
+    nerdle_classic_games_won: _svNum(nerdle.gamesWon),
+    nerdle_classic_current_streak: _svNum(nerdle.currentStreak),
+    nerdle_classic_max_streak: _svNum(nerdle.maxStreak),
+    nerdle_classic_last_played: nerdle.lastUpdated || null,
+    nerdle_games_ever_count: lpDates.length,
+    nerdle_last_played_any: (lpDates.length ? lpDates.sort()[lpDates.length - 1] : null),
     is_pwa: _svIsPwa(),
     device_class: _svDeviceClass(),
     theme: (function () { try { return localStorage.getItem('mathlete_theme') || null; } catch (e) { return null; } })(),
@@ -2220,7 +2248,7 @@ function collectSurveyHidden() {
     user_agent: (navigator.userAgent || '').slice(0, 200),
     referrer: (document.referrer || '').slice(0, 200)
   };
-  return h;
+  return _svSha256(lblToken).then(function (hash) { h.nerdle_token_hash = hash; return h; });
 }
 
 function surveyDone() { try { return localStorage.getItem('mathlete_survey_done') === SURVEY.id; } catch (e) { return false; } }
@@ -2300,23 +2328,26 @@ function submitSurvey() {
     e.textContent = 'Please answer the first ' + SURVEY.questions.filter(function (q) { return q.type !== 'text'; }).length + ' questions (the last is optional).';
     return;
   }
-  var hidden = collectSurveyHidden();
-  var payload = {
-    survey_id: SURVEY.id,
-    submitted_at: new Date().toISOString(),
-    answers: _surveyAnswers,
-    hidden: hidden,
-    device_id: hidden.device_id || null,
-    username: hidden.username || null,
-    ga_client_id: hidden.ga_client_id || null
-  };
-  // Mark done immediately (optimistic) so we never re-nag, even if the POST fails.
+  // Mark done + show thanks immediately (optimistic); build hidden fields
+  // asynchronously (nerdle token hash needs crypto.subtle), then POST.
   try { localStorage.setItem('mathlete_survey_done', SURVEY.id); } catch (e2) {}
   var fb = document.getElementById('feedback-prompt'); if (fb) fb.style.display = 'none';
-  fetch(SUPA_URL + '/rest/v1/survey_responses', {
-    method: 'POST',
-    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-    body: JSON.stringify(payload)
+  var answersSnapshot = {}; for (var k in _surveyAnswers) answersSnapshot[k] = _surveyAnswers[k];
+  collectSurveyHidden().then(function (hidden) {
+    var payload = {
+      survey_id: SURVEY.id,
+      submitted_at: new Date().toISOString(),
+      answers: answersSnapshot,
+      hidden: hidden,
+      device_id: hidden.device_id || null,
+      username: hidden.username || null,
+      ga_client_id: hidden.ga_client_id || null
+    };
+    return fetch(SUPA_URL + '/rest/v1/survey_responses', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify(payload)
+    });
   }).catch(function () {});
   gaEvent('survey_submit', { survey: SURVEY.id });
   document.getElementById('survey-form').style.display = 'none';
