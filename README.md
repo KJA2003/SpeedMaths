@@ -99,17 +99,36 @@ Project: `xlsyaqvkziurxzqgbqps` — the anon key is embedded in `index.html`
 | `question_log` | table | One row per answered question — ML training data. |
 | `survey_responses` | table | One row per completed feedback survey (see below). |
 
-**`survey_responses`** — on-completion feedback survey (5 questions, once per
-user). Anon-insert, write-only (read via SQL editor / Management API). Columns:
-`survey_id`, `submitted_at`, `answers` (jsonb), `hidden` (jsonb — game
-score/mode/accuracy, games played, `used_practice`, device/session ids,
-`ga_client_id` for GA joins, device class, etc.), plus promoted `device_id`,
-`username`, `ga_client_id`. Example: results by NPS bucket —
-```sql
-select answers->>'nps' as nps, count(*)
-from survey_responses where survey_id = 'mathlete-launch-v1'
-group by 1 order by 1;
-```
+#### Feedback survey (`survey_responses`)
+
+A short, on-completion feedback survey — modelled on the maffdoku survey format,
+ported to this single-file app. It is **schema-driven**: the entire survey is the
+`SURVEY` object in `index.html` (`SURVEY.questions`), so editing or adding
+questions needs no other code change. Bump the `SURVEY.id` suffix (`-v1` → `-v2`)
+to re-prompt everyone after a breaking change.
+
+- **When:** a prominent green *"Give feedback"* button on the results screen after
+  a Play game. **Once per user** — hidden after completion (localStorage
+  `mathlete_survey_done`); never forced (the results page stays fully usable).
+- **Questions** (`answers` jsonb): `enjoyment` (1–5), `difficulty` (1–5, where
+  1 = too easy → 5 = too hard), `returnTomorrow` (Definitely / Maybe / Probably
+  not), `nps` (0–10), `comeback` (free text, optional).
+- **Hidden fields** (`hidden` jsonb — captured silently, not asked): the game just
+  played (`score`, `mode`, `accuracy`, `duration`, `ops`), `games_played_total`,
+  `used_practice`, `username`, `device_id`, `session_id`, `ga_client_id` (joins to
+  the GA4→BQ export), device / PWA / theme / locale — **plus nerdle-ecosystem
+  signals** read from shared, same-origin localStorage (works logged-in *or* not):
+  `nerdle_classic_games_played` / `_won`, `nerdle_classic_current_streak` /
+  `_max_streak`, `is_registered`, `nerdle_token_hash` (SHA-256 of `lbl_token` — a
+  stable per-account join key; the raw token is never stored), and
+  `nerdle_games_ever_count`. These let you segment responses by how deep a
+  respondent is in the nerdleverse (fanatic vs newcomer) without a login flow.
+- **Promoted columns** (copied out of `hidden` for easy joins): `device_id`,
+  `username`, `ga_client_id`.
+
+Anon-insert, **write-only** — read via the Supabase dashboard (see
+[Querying](#querying--analysing-the-data)). Kiran owns the Supabase project;
+Richard has dashboard access.
 
 **`question_log` columns** (features + identifiers):
 
@@ -149,17 +168,18 @@ create index if not exists question_log_username_idx on question_log (username);
 ### Querying / analysing the data
 
 The embedded anon key is effectively **write-mostly**: RLS lets clients INSERT
-question rows and read the `leaderboard`, but **`question_log` SELECT is blocked**
-for the anon role (it's raw training data). A read with the anon key returns an
-empty array (HTTP 200), *not* an error — so "0 rows" from the client does **not**
-mean the table is empty.
+question / survey rows and read the `leaderboard`, but **`question_log` and
+`survey_responses` SELECT are blocked** for the anon role (raw training data /
+feedback). A read with the anon key returns an empty array (HTTP 200), *not* an
+error — so "0 rows" from the client does **not** mean the table is empty.
 
 To read/analyse it (or run migrations) you need a privileged credential — keep it
 **outside this repo**, never commit or deploy it (the anon key belongs in
 `index.html`; these do not):
 
-- **Supabase SQL editor** (dashboard) — quickest for ad-hoc queries; runs as the
-  service role and bypasses RLS.
+- **Supabase dashboard SQL editor** — the everyday path. Kiran (project owner) and
+  invited collaborators query here; it runs as the service role and bypasses RLS.
+  The **Table Editor** gives a spreadsheet view of any table.
 - **Management API** — run arbitrary SQL (including DDL) from a script/CLI:
   ```bash
   curl -s "https://api.supabase.com/v1/projects/xlsyaqvkziurxzqgbqps/database/query" \
@@ -181,6 +201,32 @@ where created_at >= '2026-07-09'
 group by 1 order by 1;
 ```
 
+Example — survey headline metrics (avg enjoyment / difficulty + NPS score):
+```sql
+select count(*) as responses,
+       round(avg((answers->>'enjoyment')::numeric),1)  as avg_enjoyment,
+       round(avg((answers->>'difficulty')::numeric),1) as avg_difficulty,
+       round(100.0 * (
+         count(*) filter (where (answers->>'nps')::int >= 9) -
+         count(*) filter (where (answers->>'nps')::int <= 6)
+       ) / nullif(count(*) filter (where answers->>'nps' is not null),0), 0) as nps_score
+from survey_responses where survey_id = 'mathlete-launch-v1';
+```
+
+Example — do nerdle veterans rate it differently from newcomers?
+```sql
+select case
+         when coalesce((hidden->>'nerdle_classic_games_played')::int,0) >= 100 then 'veteran (100+ classic)'
+         when coalesce((hidden->>'nerdle_classic_games_played')::int,0) > 0   then 'casual'
+         else 'new / no classic' end as segment,
+       count(*) as responses,
+       round(avg((answers->>'enjoyment')::numeric),1) as avg_enjoyment,
+       round(avg((answers->>'nps')::numeric),1)       as avg_nps
+from survey_responses where survey_id = 'mathlete-launch-v1'
+group by 1 order by 2 desc;
+```
+> Early rows dated 12 Jul 2026 (comments like "test…") are internal tests — filter them out.
+
 ### localStorage keys
 ```
 arith_v3           Game history + trouble questions + totalCorrect
@@ -192,7 +238,13 @@ mathlete_username  Leaderboard handle (HANDLE_xxxxxx); set once, editable
 mathlete_device_id Persistent anonymous device id (ML logging)
 mathlete_user_id   Cached nerdle account id (set once login is wired)
 mathlete_theme     'light' | 'dark' manual theme override
+mathlete_used_practice  '1' once the player has used Practice (survey hidden field)
+mathlete_survey_done    survey id the player has completed (once-per-user dedup)
 ```
+
+> The survey also *reads* (never writes) shared same-origin nerdle keys —
+> `statsState` (classic stats), `lbl_token` (login), `lastPlayed` (cross-game
+> recency) — for its hidden fields.
 
 ---
 
