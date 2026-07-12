@@ -793,7 +793,7 @@ function showPage(name) {
     try { renderPracticeConfig(); } catch(e) { console.error('renderPracticeConfig failed:', e.message, e.stack); }
   }
   if (name === 'leaderboard') initLeaderboard();
-  if (name === 'play') { loadPlayLeaderboard(); updateFirstTimeState(); }
+  if (name === 'play') { updateFirstTimeState(); }
   if (name === 'learn') { renderLearnMap(); }
 }
 
@@ -1806,7 +1806,6 @@ function _runPractice(items) {
 renderPatterns();
 renderPracticeConfig();
 loadPacePreference();
-loadPlayLeaderboard();
 updateFirstTimeState();
 
 
@@ -2368,7 +2367,6 @@ window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
 window.dismissWelcome = dismissWelcome;
 window.deleteGame = deleteGame;
-window.setPlayLbDur = setPlayLbDur;
 window.nextLearnLevel = nextLearnLevel;
 window.showSkipModal = showSkipModal;
 window.showLearnInfo = showLearnInfo;
@@ -2382,7 +2380,6 @@ window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
 window.dismissWelcome = dismissWelcome;
 window.deleteGame = deleteGame;
-window.setPlayLbDur = setPlayLbDur;
 window.nextLearnLevel = nextLearnLevel;
 window.showSkipModal = showSkipModal;
 window.showLearnInfo = showLearnInfo;
@@ -3064,65 +3061,7 @@ function exitLearnGame() {
 
 
 
-// ================================================================
-// PLAY TAB LEADERBOARD PREVIEW
-// ================================================================
-var _playLbDur = 120;
-
-function setPlayLbDur(btn, d) {
-  document.querySelectorAll('#play-lb-dur-row [data-plbdur]').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
-  _playLbDur = d;
-  loadPlayLeaderboard();
-}
-
-function loadPlayLeaderboard() {
-  var list = document.getElementById('play-lb-list');
-  var loading = document.getElementById('play-lb-loading');
-  if (!list) return;
-  list.innerHTML = '';
-  loading.style.display = 'block';
-  loading.textContent = 'Loading...';
-
-  fetch(SUPA_URL + '/rest/v1/rpc/get_best_scores', {
-    method: 'POST',
-    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ dur: _playLbDur, win_start: null })
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(rows) {
-    loading.style.display = 'none';
-    if (!Array.isArray(rows) || !rows.length) {
-      loading.style.display = 'block';
-      loading.textContent = 'No scores yet.';
-      return;
-    }
-    var myName = localStorage.getItem('mathlete_username') || '';
-    var myLower = myName.toLowerCase();
-    var people = {}; rows.forEach(function(r) { if (r && r.name) people[r.name.toLowerCase()] = 1; });
-    var iAmOnIt = myLower && people[myLower];
-    if (Object.keys(people).length < LB_MIN_PLAYERS && !iAmOnIt) {
-      loading.style.display = 'block';
-      loading.textContent = 'Not enough players yet — play to get on the board.';
-      return;
-    }
-    rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 5);
-    rows.forEach(function(row, i) {
-      var el = document.createElement('div');
-      el.className = 'lb-row';
-      var isYou = myName && row.name.toLowerCase() === myName.toLowerCase();
-      el.innerHTML =
-        '<div class="lb-rank' + (i < 3 ? ' top3' : '') + '">' + (i+1) + '</div>' +
-        '<div class="lb-name' + (isYou ? ' you' : '') + '">' + escHtml(row.name) + '</div>' +
-        '<div class="lb-score">' + row.score + '</div>';
-      list.appendChild(el);
-    });
-  })
-  .catch(function() {
-    loading.style.display = 'block';
-    loading.textContent = 'Could not load scores.';
-  });
-}
+// (Play-tab leaderboard preview removed — markup no longer exists.)
 
 
 
@@ -3673,7 +3612,6 @@ window.exitLearnGame = exitLearnGame;
 window.goToMap = goToMap;
 window.dismissWelcome = dismissWelcome;
 window.deleteGame = deleteGame;
-window.setPlayLbDur = setPlayLbDur;
 window.nextLearnLevel = nextLearnLevel;
 window.showSkipModal = showSkipModal;
 window.showLearnInfo = showLearnInfo;
