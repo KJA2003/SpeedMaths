@@ -97,6 +97,19 @@ Project: `xlsyaqvkziurxzqgbqps` — the anon key is embedded in `index.html`
 | `leaderboard` | table | Submitted scores (`name`, `score`, `duration`, `created_at`). |
 | `get_best_scores` | RPC | Returns top scores for a duration + time window. |
 | `question_log` | table | One row per answered question — ML training data. |
+| `survey_responses` | table | One row per completed feedback survey (see below). |
+
+**`survey_responses`** — on-completion feedback survey (5 questions, once per
+user). Anon-insert, write-only (read via SQL editor / Management API). Columns:
+`survey_id`, `submitted_at`, `answers` (jsonb), `hidden` (jsonb — game
+score/mode/accuracy, games played, `used_practice`, device/session ids,
+`ga_client_id` for GA joins, device class, etc.), plus promoted `device_id`,
+`username`, `ga_client_id`. Example: results by NPS bucket —
+```sql
+select answers->>'nps' as nps, count(*)
+from survey_responses where survey_id = 'mathlete-launch-v1'
+group by 1 order by 1;
+```
 
 **`question_log` columns** (features + identifiers):
 
