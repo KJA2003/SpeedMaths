@@ -792,7 +792,7 @@ function showPage(name) {
     try { renderPatterns(); } catch(e) { console.error('renderPatterns failed:', e.message, e.stack); }
     try { renderPracticeConfig(); } catch(e) { console.error('renderPracticeConfig failed:', e.message, e.stack); }
   }
-  if (name === 'leaderboard') loadLeaderboard();
+  if (name === 'leaderboard') initLeaderboard();
   if (name === 'play') { loadPlayLeaderboard(); updateFirstTimeState(); }
   if (name === 'learn') { renderLearnMap(); }
 }
@@ -1897,17 +1897,80 @@ var LB_MIN_PLAYERS = 5;
 var _submitFn = null;
 var _pendingStreakN = 0;
 
+// Leaderboard filter visibility is driven by live player counts: a window /
+// duration button only appears if that board has >= LB_MIN_PLAYERS distinct
+// players (so sparse boards read as "nobody plays this"). 'All time' is always
+// available as the guaranteed non-empty fallback.
+var LB_WINDOWS = ['day', 'week', 'month', 'all'];
+var LB_DURS = [120, 60, 30, 300, 600];   // display order + default preference
+var _lbCounts = null;                      // { day:{dur:count}, week:{}, month:{}, all:{} }
+
+function lbCount(w, d) { return (_lbCounts && _lbCounts[w] && _lbCounts[w][d]) || 0; }
+function lbWindowHasContent(w) { return LB_DURS.some(function(d) { return lbCount(w, d) >= LB_MIN_PLAYERS; }); }
+
+function _lbPickDurFor(w) {
+  if (lbCount(w, lbDur) >= LB_MIN_PLAYERS) return lbDur;
+  return LB_DURS.filter(function(d) { return lbCount(w, d) >= LB_MIN_PLAYERS; })[0] || lbDur;
+}
+
+// Fetch per-(window,duration) player counts, choose a populated default, render
+// the filter buttons, then load the board. Called when the Leaderboard tab opens.
+function initLeaderboard() {
+  fetch(SUPA_URL + '/rest/v1/rpc/get_leaderboard_counts', {
+    method: 'POST',
+    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({ day_start: windowStart('day'), week_start: windowStart('week'), month_start: windowStart('month') })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(rows) {
+    _lbCounts = { day: {}, week: {}, month: {}, all: {} };
+    if (Array.isArray(rows)) rows.forEach(function(r) {
+      _lbCounts.day[r.duration] = r.c_day; _lbCounts.week[r.duration] = r.c_week;
+      _lbCounts.month[r.duration] = r.c_month; _lbCounts.all[r.duration] = r.c_all;
+    });
+    // Default to the most-recent window that has content; 'all' is the fallback.
+    lbWindow = LB_WINDOWS.filter(function(w) { return lbWindowHasContent(w); })[0] || 'all';
+    lbDur = _lbPickDurFor(lbWindow);
+    renderLbFilters();
+    loadLeaderboard();
+  })
+  .catch(function() { _lbCounts = null; renderLbFilters(); loadLeaderboard(); });
+}
+
+function renderLbFilters() {
+  document.querySelectorAll('#lb-window-filters [data-window]').forEach(function(b) {
+    var w = b.getAttribute('data-window');
+    var show = !_lbCounts || w === 'all' || lbWindowHasContent(w);
+    b.style.display = show ? '' : 'none';
+    b.classList.toggle('active', w === lbWindow);
+  });
+  var anyDur = false;
+  document.querySelectorAll('#lb-dur-filters [data-sec]').forEach(function(b) {
+    var d = parseInt(b.getAttribute('data-sec'), 10);
+    var show = !_lbCounts || lbCount(lbWindow, d) >= LB_MIN_PLAYERS;
+    if (show) anyDur = true;
+    b.style.display = show ? '' : 'none';
+    b.classList.toggle('active', d === lbDur);
+  });
+  // Safety net: never leave the row button-less (shouldn't trigger for 'all').
+  if (!anyDur && _lbCounts) {
+    document.querySelectorAll('#lb-dur-filters [data-sec]').forEach(function(b) {
+      b.style.display = '';
+      b.classList.toggle('active', parseInt(b.getAttribute('data-sec'), 10) === lbDur);
+    });
+  }
+}
+
 function setLbWindow(btn, w) {
-  document.querySelectorAll('#lb-window-filters [data-window]').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
   lbWindow = w;
+  lbDur = _lbPickDurFor(w);
+  renderLbFilters();
   loadLeaderboard();
 }
 
 function setLbDur(btn, d) {
-  document.querySelectorAll('#lb-dur-filters [data-sec]').forEach(function(b) { b.classList.remove('active'); });
-  btn.classList.add('active');
   lbDur = d;
+  renderLbFilters();
   loadLeaderboard();
 }
 
@@ -1944,14 +2007,12 @@ function loadLeaderboard() {
       return;
     }
     var myName = localStorage.getItem('mathlete_username') || '';
-    var myLower = myName.toLowerCase();
-    var people = {}; rows.forEach(function(r) { if (r && r.name) people[r.name.toLowerCase()] = 1; });
-    var iAmOnIt = myLower && people[myLower];
-    // Hide sparse boards (they read as "nobody plays this") unless the viewer is on it
-    if (!rows.length || (Object.keys(people).length < LB_MIN_PLAYERS && !iAmOnIt)) {
+    // Sparsity is handled by hiding the filter buttons (see renderLbFilters),
+    // so any board we actually load here is expected to have content.
+    if (!rows.length) {
       var e = document.getElementById('lb-empty');
       e.style.display = 'block';
-      e.textContent = rows.length ? 'Not enough players yet — be one of the first to top this board.' : 'No scores yet for this period.';
+      e.textContent = 'No scores yet for this period.';
       return;
     }
     rows = rows.sort(function(a,b) { return b.score - a.score; }).slice(0, 10);
