@@ -1793,15 +1793,6 @@ function _runPractice(items) {
 // ================================================================
 // INIT
 // ================================================================
-// Reset streak for demo — sets lastDate to yesterday so next game triggers animation
-  (function() {
-    var s = loadStreak();
-    var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-    var yStr = yesterday.getFullYear() + '-' + ('0'+(yesterday.getMonth()+1)).slice(-2) + '-' + ('0'+yesterday.getDate()).slice(-2);
-    s.lastDate = yStr;
-    s.streak = Math.max(1, s.streak || 1); // keep existing streak or start at 1
-    saveStreak(s);
-  })();
   renderHistory();
 renderPatterns();
 renderPracticeConfig();
@@ -3107,10 +3098,6 @@ function todayStr() {
 function loadStreak() {
   try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null }; }
   catch(e) { return { streak: 0, lastDate: null }; }
-}
-
-function resetStreakForDemo() {
-  saveStreak({ streak: 0, lastDate: null });
 }
 
 function saveStreak(s) {
