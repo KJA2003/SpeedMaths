@@ -1,0 +1,10 @@
+# Local scratch / temp working files (Claude's scratchpad — never deploy/commit)
+scratchpad/
+
+# Dependencies (none committed; no build step)
+node_modules/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
