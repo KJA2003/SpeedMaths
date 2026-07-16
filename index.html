@@ -152,6 +152,9 @@ body {
   color: #ccc; cursor: pointer; padding: 4px 0;
 }
 .stop-btn:hover { color: #999; }
+/* In-play STOP: use the main text colour so it's clearly visible (theme-aware). */
+.stop-btn.stop-header { color: var(--text); }
+.stop-btn.stop-header:hover { color: var(--accent); }
 
 /* PACE BAR */
 .pace-wrap { width: 100%; margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 44px; }
@@ -1918,14 +1921,19 @@ var _pendingStreakN = 0;
 // available as the guaranteed non-empty fallback.
 var LB_WINDOWS = ['day', 'week', 'month', 'all'];
 var LB_DURS = [120, 60, 30, 300, 600];   // display order + default preference
-var _lbCounts = null;                      // { day:{dur:count}, week:{}, month:{}, all:{} }
+var LB_LAUNCH = '2026-07-09T00:00:00Z';   // 'all time' floor — keep in sync with the counts RPC
+var _lbCounts = null;                      // { day:{dur:count}, ... }
+var _lbMe = null;                          // { day:{dur:bool}, ... } — is the viewer on that board?
 
 function lbCount(w, d) { return (_lbCounts && _lbCounts[w] && _lbCounts[w][d]) || 0; }
-function lbWindowHasContent(w) { return LB_DURS.some(function(d) { return lbCount(w, d) >= LB_MIN_PLAYERS; }); }
+function lbMe(w, d) { return !!(_lbMe && _lbMe[w] && _lbMe[w][d]); }
+// A board is shown if it has enough players OR the viewer is on it themselves.
+function lbShowDur(w, d) { return lbCount(w, d) >= LB_MIN_PLAYERS || lbMe(w, d); }
+function lbWindowHasContent(w) { return LB_DURS.some(function(d) { return lbShowDur(w, d); }); }
 
 function _lbPickDurFor(w) {
-  if (lbCount(w, lbDur) >= LB_MIN_PLAYERS) return lbDur;
-  return LB_DURS.filter(function(d) { return lbCount(w, d) >= LB_MIN_PLAYERS; })[0] || lbDur;
+  if (lbShowDur(w, lbDur)) return lbDur;
+  return LB_DURS.filter(function(d) { return lbShowDur(w, d); })[0] || lbDur;
 }
 
 // Fetch per-(window,duration) player counts, choose a populated default, render
@@ -1934,22 +1942,25 @@ function initLeaderboard() {
   fetch(SUPA_URL + '/rest/v1/rpc/get_leaderboard_counts', {
     method: 'POST',
     headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', 'Accept': 'application/json' },
-    body: JSON.stringify({ day_start: windowStart('day'), week_start: windowStart('week'), month_start: windowStart('month') })
+    body: JSON.stringify({ day_start: windowStart('day'), week_start: windowStart('week'), month_start: windowStart('month'), me: getUsername() || null })
   })
   .then(function(r) { return r.json(); })
   .then(function(rows) {
     _lbCounts = { day: {}, week: {}, month: {}, all: {} };
+    _lbMe = { day: {}, week: {}, month: {}, all: {} };
     if (Array.isArray(rows)) rows.forEach(function(r) {
       _lbCounts.day[r.duration] = r.c_day; _lbCounts.week[r.duration] = r.c_week;
       _lbCounts.month[r.duration] = r.c_month; _lbCounts.all[r.duration] = r.c_all;
+      _lbMe.day[r.duration] = r.me_day; _lbMe.week[r.duration] = r.me_week;
+      _lbMe.month[r.duration] = r.me_month; _lbMe.all[r.duration] = r.me_all;
     });
-    // Default to the most-recent window that has content; 'all' is the fallback.
+    // Default to the most-recent window that has content (or a board you're on); 'all' is the fallback.
     lbWindow = LB_WINDOWS.filter(function(w) { return lbWindowHasContent(w); })[0] || 'all';
     lbDur = _lbPickDurFor(lbWindow);
     renderLbFilters();
     loadLeaderboard();
   })
-  .catch(function() { _lbCounts = null; renderLbFilters(); loadLeaderboard(); });
+  .catch(function() { _lbCounts = null; _lbMe = null; renderLbFilters(); loadLeaderboard(); });
 }
 
 function renderLbFilters() {
@@ -1962,7 +1973,7 @@ function renderLbFilters() {
   var anyDur = false;
   document.querySelectorAll('#lb-dur-filters [data-sec]').forEach(function(b) {
     var d = parseInt(b.getAttribute('data-sec'), 10);
-    var show = !_lbCounts || lbCount(lbWindow, d) >= LB_MIN_PLAYERS;
+    var show = !_lbCounts || lbShowDur(lbWindow, d);
     if (show) anyDur = true;
     b.style.display = show ? '' : 'none';
     b.classList.toggle('active', d === lbDur);
@@ -1994,7 +2005,7 @@ function windowStart(w) {
   if (w === 'day')   { var d = new Date(now); d.setHours(0,0,0,0); return d.toISOString(); }
   if (w === 'week')  { var d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d.toISOString(); }
   if (w === 'month') { var d = new Date(now.getFullYear(), now.getMonth(), 1); return d.toISOString(); }
-  return null; // all time
+  return LB_LAUNCH; // 'all time' = since the nerdle launch (hides pre-launch old-build scores)
 }
 
 function loadLeaderboard() {
