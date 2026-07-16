@@ -753,6 +753,31 @@ function getDeviceId() {
 function getUserId() {
   try { return localStorage.getItem('mathlete_user_id') || null; } catch(e) { return null; }
 }
+// Acquisition attribution — capture campaign params (?utm_source/campaign, or
+// ?ref=/src=) on the FIRST tagged visit and keep them (first-touch), so we can
+// segment a push/campaign cohort from organic usage in question_log + survey.
+function captureAcquisition() {
+  try {
+    if (localStorage.getItem('mathlete_acq')) return; // first-touch only
+    var p = new URLSearchParams(window.location.search || '');
+    var src = p.get('utm_source') || p.get('ref') || p.get('src');
+    if (!src) return; // untagged visit → organic; store nothing
+    var hist = null; try { hist = JSON.parse(localStorage.getItem('arith_v3') || 'null'); } catch(e) {}
+    var acq = {
+      source: src,
+      medium: p.get('utm_medium') || null,
+      campaign: p.get('utm_campaign') || null,
+      ts: new Date().toISOString(),
+      new_at_touch: !(hist && hist.games && hist.games.length)  // brand-new vs re-engaged
+    };
+    localStorage.setItem('mathlete_acq', JSON.stringify(acq));
+  } catch(e) {}
+}
+function getAcq() {
+  try { return JSON.parse(localStorage.getItem('mathlete_acq') || 'null') || {}; }
+  catch(e) { return {}; }
+}
+captureAcquisition();
 // GA4 event helper (fires to both configured properties via gtag); safe no-op if gtag absent.
 function gaEvent(name, params) {
   try { if (window.gtag) window.gtag('event', name, params || {}); } catch(e) {}
@@ -2214,6 +2239,9 @@ function collectSurveyHidden() {
     avg_time_ms: (g.avgTime != null ? g.avgTime : null),
     ops: g.ops || null,
     games_played_total: _svGamesPlayedTotal(),
+    acq_source: getAcq().source || null,
+    acq_campaign: getAcq().campaign || null,
+    acq_new_at_touch: (getAcq().new_at_touch != null ? getAcq().new_at_touch : null),
     used_practice: (function () { try { return localStorage.getItem('mathlete_used_practice') === '1'; } catch (e) { return false; } })(),
     username: getUsername() || null,
     device_id: getDeviceId(),
@@ -3361,6 +3389,8 @@ function logQuestion(op, a, b, correct, elapsedMs, gamePos, timeLeft, dur) {
     session_id:    currentSessionId, // this game's id (groups its answers)
     user_id:       getUserId(),      // nerdle account id when logged in, else null
     username:      getUsername() || null, // chosen leaderboard handle (HANDLE_xxxxxx), null until set
+    acq_source:    getAcq().source || null,   // campaign attribution (first-touch); null = organic
+    acq_campaign:  getAcq().campaign || null,
     client_ts:     Date.now(),       // client timestamp (epoch ms)
     op:            op,
     a:             a,
