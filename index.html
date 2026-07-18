@@ -671,11 +671,6 @@ body { background: var(--bg); color: var(--text); }
   .hud-cell { flex-direction: row; align-items: baseline; gap: 5px; }
   .hud-val { margin-top: 0; }
   .timer-row { margin-bottom: 18px; }
-  /* ~25% smaller keypad on mobile to leave more room above the ad */
-  :root.kp-on .keypad { margin-top: 8px; }
-  .keypad-grid { max-width: 232px; gap: 6px; }
-  .key { height: 41px; font-size: 1.2rem; border-radius: 8px; }
-  .key-del { font-size: 1.1rem; }
 }
 
 /* ===== Custom numeric keypad (touch devices; .kp-on toggled by JS on input focus) ===== */
@@ -692,6 +687,13 @@ body { background: var(--bg); color: var(--text); }
 .key:active { background: var(--border); transform: translateY(1px); }
 .key-del { font-size: 1.35rem; color: var(--muted); }
 .key-blank { background: none; box-shadow: none; pointer-events: none; }
+/* ~25% smaller keypad on mobile — placed AFTER the base rules so it actually wins */
+@media (max-width: 679px) {
+  :root.kp-on .keypad { margin-top: 8px; }
+  .keypad-grid { max-width: 232px; gap: 6px; }
+  .key { height: 41px; font-size: 1.2rem; border-radius: 8px; }
+  .key-del { font-size: 1.1rem; }
+}
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
