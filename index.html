@@ -661,6 +661,9 @@ body { background: var(--bg); color: var(--text); }
 .hdr-btn:active { background: var(--text); color: var(--surface); }
 :root.playing .quit-header { display: inline-flex; }
 /* .skip-header is shown by JS after 5s (only ever during play) */
+/* No instruction box on the play screen — hide the whole intro/demo box during
+   play (it stays on the landing/config screen where the demo teaches auto-submit). */
+:root.playing #welcome-banner { display: none !important; }
 
 /* Mobile play screen: slim top bar (drop subtitle) + one-line Time/Score HUD */
 @media (max-width: 679px) {
@@ -668,6 +671,11 @@ body { background: var(--bg); color: var(--text); }
   .hud-cell { flex-direction: row; align-items: baseline; gap: 5px; }
   .hud-val { margin-top: 0; }
   .timer-row { margin-bottom: 18px; }
+  /* ~25% smaller keypad on mobile to leave more room above the ad */
+  :root.kp-on .keypad { margin-top: 8px; }
+  .keypad-grid { max-width: 232px; gap: 6px; }
+  .key { height: 41px; font-size: 1.2rem; border-radius: 8px; }
+  .key-del { font-size: 1.1rem; }
 }
 
 /* ===== Custom numeric keypad (touch devices; .kp-on toggled by JS on input focus) ===== */
