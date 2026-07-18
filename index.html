@@ -651,10 +651,23 @@ body { background: var(--bg); color: var(--text); }
 
 /* Focus mode during play: hide the tabs, show STOP in the header next to the menu */
 :root.playing .nav { display: none; }
-.stop-header { display: none; }
-:root.playing .stop-header {
-  display: inline-flex; align-items: center; align-self: center;
-  margin: 0 0 0 16px; padding: 5px 9px; line-height: 1;
+/* Play-mode header pills: Quit + Skip (identical outlined buttons) */
+.hdr-btn {
+  display: none; background: none; border: 1.5px solid var(--text); color: var(--text);
+  border-radius: 7px; font-family: 'Roboto Mono', monospace; font-size: 0.56rem;
+  letter-spacing: 2px; text-transform: uppercase; font-weight: 700;
+  padding: 6px 12px; line-height: 1; cursor: pointer; align-self: center; margin-left: 10px;
+}
+.hdr-btn:active { background: var(--text); color: var(--surface); }
+:root.playing .quit-header { display: inline-flex; }
+/* .skip-header is shown by JS after 5s (only ever during play) */
+
+/* Mobile play screen: slim top bar (drop subtitle) + one-line Time/Score HUD */
+@media (max-width: 679px) {
+  .brand-sub { display: none; }
+  .hud-cell { flex-direction: row; align-items: baseline; gap: 5px; }
+  .hud-val { margin-top: 0; }
+  .timer-row { margin-bottom: 18px; }
 }
 
 /* ===== Custom numeric keypad (touch devices; .kp-on toggled by JS on input focus) ===== */
@@ -662,14 +675,15 @@ body { background: var(--bg); color: var(--text); }
 :root.kp-on .keypad {
   display: flex; flex-direction: column; align-items: center; width: 100%; margin: 14px 0 0;
 }
-.keypad-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; width: 100%; max-width: 480px; }
+.keypad-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; max-width: 300px; }
 .key {
   height: 54px; border: none; border-radius: 10px; background: var(--surface); color: var(--text);
   font-family: 'Roboto Mono', monospace; font-size: 1.5rem; font-weight: 700; cursor: pointer;
   box-shadow: 0 1px 2px rgba(0,0,0,0.18); -webkit-tap-highlight-color: transparent;
 }
 .key:active { background: var(--border); transform: translateY(1px); }
-.key-del { grid-column: 6; grid-row: 1 / span 2; height: auto; font-size: 1.3rem; color: var(--muted); }
+.key-del { font-size: 1.35rem; color: var(--muted); }
+.key-blank { background: none; box-shadow: none; pointer-events: none; }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -1036,6 +1050,11 @@ function startGame() {
 
   nextQuestion();
 
+  _startTimer();
+}
+
+function _startTimer() {
+  clearInterval(timerInterval);
   timerInterval = setInterval(function() {
     timeLeft--;
     document.getElementById('timer-display').textContent = formatTime(timeLeft);
@@ -1058,7 +1077,22 @@ function nextQuestion() {
   startPaceTicker();
 }
 
+// Quitting is guarded by a confirm, so a mis-tap (or the hamburger) can't lose a
+// game. Opening the confirm pauses the clock; "Keep playing" resumes it.
+function askQuit() {
+  if (!document.documentElement.classList.contains('playing')) return;
+  clearInterval(timerInterval); stopPaceTicker(); hideSkipBtn(); accepting = false;
+  document.getElementById('quit-confirm').style.display = 'flex';
+}
+function keepPlaying() {
+  document.getElementById('quit-confirm').style.display = 'none';
+  accepting = true;
+  _startTimer(); startPaceTicker();
+  var inp = document.getElementById('answer-input'); if (inp) inp.focus();
+}
+
 function quitGame() {
+  document.getElementById('quit-confirm').style.display = 'none';
   hideSkipBtn();
   clearInterval(timerInterval); stopPaceTicker(); accepting = false;
   document.documentElement.classList.remove('playing');
@@ -3652,6 +3686,8 @@ function skipQuestion() {
 // Expose to window for inline onclick handlers
 window.startGame = startGame;
 window.quitGame = quitGame;
+window.askQuit = askQuit;
+window.keepPlaying = keepPlaying;
 window.skipQuestion = skipQuestion;
 window.toggleOp = toggleOp;
 window.toggleRanges = toggleRanges;
@@ -3701,13 +3737,24 @@ window.retryLearnLevel = retryLearnLevel;
   <button class="icon-btn" aria-label="Menu" onclick="openMenu()">
     <svg width="22" height="16" viewBox="0 0 24 17" fill="currentColor" aria-hidden="true"><path d="M0 16.07V13.4h24v2.67H0zM0 9.4V6.74h24V9.4H0zM0 2.74V.07h24v2.67H0z"></path></svg>
   </button>
-  <button class="stop-btn stop-header" onclick="quitGame()">Stop</button>
+  <button class="hdr-btn quit-header" onclick="askQuit()">Quit</button>
+  <button id="skip-btn" class="hdr-btn skip-header" onclick="skipQuestion()">Skip</button>
   <span class="header-spacer"></span>
   <a class="brand-block" href="https://www.nerdlegame.com" aria-label="Mathlete by nerdle">
     <span class="brand-mark"><span class="m-word">mathlete</span><span class="m-dot">.</span></span>
     <span class="brand-sub">nerdle brain training</span>
   </a>
 </header>
+
+<!-- Quit confirm — clock pauses while open -->
+<div id="quit-confirm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:130;align-items:center;justify-content:center;padding:24px">
+  <div style="background:var(--surface);border-radius:8px;max-width:300px;width:100%;padding:26px 22px;text-align:center">
+    <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:6px">Quit game?</div>
+    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:20px">Your score won't be saved.</div>
+    <button onclick="keepPlaying()" style="width:100%;padding:13px;background:var(--accent);color:var(--accent-contrast);border:none;border-radius:6px;font-family:'Roboto Mono',monospace;font-size:0.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;margin-bottom:10px">Keep playing</button>
+    <button onclick="quitGame()" style="width:100%;padding:9px;background:none;border:none;color:var(--muted);font-family:'Roboto Mono',monospace;font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;cursor:pointer">Quit</button>
+  </div>
+</div>
 
 <nav class="nav">
   <button class="nav-btn active" data-page="play">Play</button>
@@ -3794,9 +3841,6 @@ window.retryLearnLevel = retryLearnLevel;
     </div>
     <div class="question" id="question-display"></div>
     <input class="answer-input" id="answer-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
-    <div id="skip-wrap" style="min-height:28px;margin-top:12px;text-align:center">
-      <button id="skip-btn" onclick="skipQuestion()" style="display:none;background:none;border:none;font-family:'Roboto Mono',monospace;font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#bbb;cursor:pointer;padding:4px 8px;border-bottom:1px solid #ddd;">Skip</button>
-    </div>
     <div class="pace-wrap" id="pace-wrap">
       <div class="pace-label" id="pace-label">vs your avg</div>
       <div class="pace-bar-wrap"><div class="pace-fill" id="pace-fill"></div></div>
@@ -4098,12 +4142,13 @@ window.retryLearnLevel = retryLearnLevel;
     <button class="key" type="button" data-k="3">3</button>
     <button class="key" type="button" data-k="4">4</button>
     <button class="key" type="button" data-k="5">5</button>
-    <button class="key key-del" type="button" data-k="del" aria-label="Delete">&#9003;</button>
     <button class="key" type="button" data-k="6">6</button>
     <button class="key" type="button" data-k="7">7</button>
     <button class="key" type="button" data-k="8">8</button>
     <button class="key" type="button" data-k="9">9</button>
+    <span class="key key-blank" aria-hidden="true"></span>
     <button class="key" type="button" data-k="0">0</button>
+    <button class="key key-del" type="button" data-k="del" aria-label="Delete">&#9003;</button>
   </div>
 </div>
 
@@ -4297,6 +4342,8 @@ window.retryLearnLevel = retryLearnLevel;
 
   function openMenu(){
     if (!overlay) return;
+    // Mid-game the hamburger routes through the Quit confirm — can't lose a game by accident.
+    if (document.documentElement.classList.contains('playing')) { if (window.askQuit) window.askQuit(); return; }
     overlay.classList.add('open'); panel.classList.add('open');
     document.body.style.overflow = 'hidden';
     if (window.updateThemeLabel) window.updateThemeLabel();
