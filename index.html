@@ -847,6 +847,12 @@ function showPage(name) {
   if (name === 'leaderboard') initLeaderboard();
   if (name === 'play') { updateFirstTimeState(); }
   if (name === 'learn') { renderLearnMap(); }
+  if (name === 'daily') {
+    if (_dailyInProgress) { resumeDailyChallenge(); } else { initDailyChallenge(); }
+  } else {
+    // leaving the daily tab — pause if a game is in progress
+    if (typeof _dailyInProgress !== 'undefined' && _dailyInProgress) pauseDailyChallenge();
+  }
 }
 
 // ================================================================
@@ -1347,9 +1353,9 @@ function renderHistory() {
       sym.style.cssText = 'font-size:1rem;font-weight:700;width:20px;flex-shrink:0;text-align:center;';
       sym.textContent = syms[op];
       var track = document.createElement('div');
-      track.style.cssText = 'flex:1;height:8px;background:#f0f0eb;border-radius:4px;overflow:hidden;';
+      track.style.cssText = 'flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden;';
       var fill = document.createElement('div');
-      fill.style.cssText = 'height:100%;border-radius:4px;background:#111;transition:width 0.6s ease;';
+      fill.style.cssText = 'height:100%;border-radius:4px;background:var(--text);transition:width 0.6s ease;';
       setTimeout(function(w) { return function() { fill.style.width = w + '%'; }; }(r.ability), 100);
       track.appendChild(fill);
       var label = document.createElement('div');
@@ -1874,6 +1880,7 @@ renderPatterns();
 renderPracticeConfig();
 loadPacePreference();
 updateFirstTimeState();
+// daily challenge inits via showPage
 
 
 // ================================================================
@@ -2181,6 +2188,9 @@ function closeModal() {
   document.getElementById('name-modal').style.display = 'none';
   _submitFn = null;
   if (_pendingStreakN) { var sn = _pendingStreakN; _pendingStreakN = 0; showStreakAnimation(sn); }
+  // Refresh daily leaderboard if visible, to reflect the just-submitted score
+  var dailyResults = document.getElementById('daily-results');
+  if (dailyResults && dailyResults.style.display !== 'none') { loadDailyLeaderboard(false); }
 }
 
 // Profanity blocklist. Handles are max 3 chars, so short entries below do the
@@ -3183,28 +3193,51 @@ function todayStr() {
 }
 
 function loadStreak() {
-  try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null }; }
-  catch(e) { return { streak: 0, lastDate: null }; }
+  try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null, activeDates: [] }; }
+  catch(e) { return { streak: 0, lastDate: null, activeDates: [] }; }
 }
 
 function saveStreak(s) {
   try { localStorage.setItem('arith_streak', JSON.stringify(s)); } catch(e) {}
 }
 
+function dateStrMinusDays(n) {
+  var d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+// Streak logic: rolling 7-day window. Streak continues as long as at least
+// 5 of the last 7 calendar days (including today) were active — i.e. up to
+// 2 "freeze" days per week are forgiven. Streak only resets if activity
+// drops below 5-in-7.
 function updateStreak() {
   var s = loadStreak();
+  if (!s.activeDates) s.activeDates = [];
   var today = todayStr();
-  if (s.lastDate === today) return false; // already counted today
-  var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  var yStr = yesterday.getFullYear() + '-' + ('0'+(yesterday.getMonth()+1)).slice(-2) + '-' + ('0'+yesterday.getDate()).slice(-2);
-  if (s.lastDate === yStr) {
-    s.streak = (s.streak || 0) + 1;
-  } else {
-    s.streak = 1;
+
+  if (s.lastDate !== today) {
+    // Record today as active (dedup-safe)
+    if (s.activeDates.indexOf(today) === -1) s.activeDates.push(today);
+    // Keep only last 60 days of history (enough for windowing, avoids unbounded growth)
+    var cutoff = dateStrMinusDays(60);
+    s.activeDates = s.activeDates.filter(function(d) { return d >= cutoff; });
+
+    // Count active days within the rolling 7-day window (today + previous 6)
+    var windowDates = [];
+    for (var i = 0; i < 7; i++) windowDates.push(dateStrMinusDays(i));
+    var activeInWindow = windowDates.filter(function(d) { return s.activeDates.indexOf(d) !== -1; }).length;
+
+    if (activeInWindow >= 5) {
+      s.streak = (s.streak || 0) + 1;
+    } else {
+      s.streak = 1; // window activity too low — restart
+    }
+    s.lastDate = today;
+    saveStreak(s);
+    return s.streak;
   }
-  s.lastDate = today;
-  saveStreak(s);
-  return s.streak; // return new streak value
+  return false; // already counted today
 }
 
 function renderStreak() {
@@ -3693,9 +3726,534 @@ function skipQuestion() {
   nextQuestion();
 }
 
+
+// ================================================================
+// DAILY CHALLENGE
+// ================================================================
+
+// ── Deterministic seeded RNG (LCG) ───────────────────────────────
+function SeededRNG(seed) {
+  this.s = seed >>> 0;
+}
+SeededRNG.prototype.next = function() {
+  this.s = (Math.imul(1664525, this.s) + 1013904223) >>> 0;
+  return this.s / 4294967296;
+};
+SeededRNG.prototype.randInt = function(lo, hi) {
+  return lo + Math.floor(this.next() * (hi - lo + 1));
+};
+
+function dateToSeed(dateStr) {
+  // e.g. "2026-09-18" -> deterministic integer
+  var parts = dateStr.split('-');
+  return parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
+}
+
+function todayDateStr() {
+  var d = new Date();
+  return d.getFullYear() + '-' +
+    ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
+    ('0' + d.getDate()).slice(-2);
+}
+
+// ── Daily challenge config ────────────────────────────────────────
+// Difficulty ramps Mon(1)=easy → Sun(7)=hardest
+// Friday = special mode (rotates weekly)
+
+var DAILY_SPECIAL_MODES = [
+  { id: 'addsub',   label: 'Addition & Subtraction only', ops: ['addition','subtraction'] },
+  { id: 'add',      label: 'Addition only',               ops: ['addition'] },
+  { id: 'sub',      label: 'Subtraction only',            ops: ['subtraction'] },
+  { id: 'muldiv',   label: 'Multiplication & Division only', ops: ['multiplication','division'] },
+  { id: 'mul',      label: 'Multiplication only',         ops: ['multiplication'] },
+  { id: 'div',      label: 'Division only',               ops: ['division'] },
+  { id: 'prime',    label: 'Prime numbers only',          ops: ['multiplication','division'], primeOnly: true },
+  { id: 'onedigit', label: 'Single-digit answers only',   ops: ['addition','subtraction','multiplication','division'], oneDigit: true }
+];
+
+function getDailyConfig(dateStr) {
+  var d = new Date(dateStr + 'T12:00:00');
+  var dow = d.getDay(); // 0=Sun,1=Mon,...,6=Sat
+  // Map to 1(Mon)..7(Sun)
+  var dayNum = dow === 0 ? 7 : dow;
+
+  var isFriday = (dow === 5);
+
+  // Difficulty 1-7 based on day of week
+  var difficulty = dayNum; // Mon=1 easy, Sun=7 hardest
+
+  // Friday special: rotate through modes by week number
+  var specialMode = null;
+  if (isFriday) {
+    var weekNum = Math.floor((d - new Date(d.getFullYear(), 0, 1)) / 604800000);
+    specialMode = DAILY_SPECIAL_MODES[weekNum % DAILY_SPECIAL_MODES.length];
+  }
+
+  // Operations & ranges based on difficulty
+  var ops, addMax, mulAMax;
+  if (specialMode) {
+    ops = specialMode.ops;
+  } else {
+    ops = ['addition','subtraction','multiplication','division'];
+  }
+
+  // Add/sub range grows with difficulty
+  addMax = [20, 30, 50, 75, 100, 100, 100][difficulty - 1];
+  // Mul A range
+  mulAMax = [6, 7, 9, 10, 12, 12, 12][difficulty - 1];
+  // Mul B range
+  var mulBMax = [20, 30, 50, 75, 100, 100, 100][difficulty - 1];
+
+  var dayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var diffLabels = ['','Very Easy','Easy','Medium','Medium-Hard','Hard','Very Hard','Extreme'];
+
+  return {
+    dateStr:    dateStr,
+    dow:        dow,
+    dayNum:     dayNum,
+    dayName:    dayNames[dayNum],
+    difficulty: difficulty,
+    diffLabel:  diffLabels[difficulty],
+    diffPct:    Math.round(10 + (difficulty - 1) / 6 * 90),
+    ops:        ops,
+    addA:       [2, addMax],
+    addB:       [2, addMax],
+    mulA:       [2, mulAMax],
+    mulB:       [2, mulBMax],
+    specialMode: specialMode,
+    isFriday:   isFriday
+  };
+}
+
+// ── Generate 600 seeded questions ────────────────────────────────
+function generateDailyQuestions(cfg) {
+  var seed = dateToSeed(cfg.dateStr);
+  var rng = new SeededRNG(seed);
+  var questions = [];
+  var PRIMES_SET = [2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,73,79,83,89,97];
+
+  function isPrimeVal(n) { return PRIMES_SET.indexOf(n) !== -1; }
+  function randPrimeVal(lo, hi) {
+    var eligible = PRIMES_SET.filter(function(p) { return p >= lo && p <= hi; });
+    if (!eligible.length) return PRIMES_SET[0];
+    return eligible[Math.floor(rng.next() * eligible.length)];
+  }
+
+  for (var i = 0; i < 600; i++) {
+    var ops = cfg.ops;
+    var op = ops[Math.floor(rng.next() * ops.length)];
+    var a, b, q, ans;
+    var attempts = 0;
+
+    do {
+      attempts++;
+      if (op === 'addition') {
+        a = rng.randInt(cfg.addA[0], cfg.addA[1]);
+        b = rng.randInt(cfg.addB[0], cfg.addB[1]);
+        if (cfg.specialMode && cfg.specialMode.primeOnly) { a = randPrimeVal(2, 97); b = randPrimeVal(2, 97); }
+        ans = a + b;
+        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
+        q = a + ' + ' + b + ' =';
+      } else if (op === 'subtraction') {
+        a = rng.randInt(cfg.addA[0], cfg.addA[1]);
+        b = rng.randInt(cfg.addB[0], cfg.addB[1]);
+        if (cfg.specialMode && cfg.specialMode.primeOnly) { a = randPrimeVal(2, 97); b = randPrimeVal(2, 97); }
+        var big = Math.max(a, b), sml = Math.min(a, b);
+        if (big === sml) continue;
+        ans = big - sml;
+        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
+        q = big + ' - ' + sml + ' ='; a = big; b = sml;
+      } else if (op === 'multiplication') {
+        a = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, cfg.mulA[1]) : rng.randInt(cfg.mulA[0], cfg.mulA[1]);
+        b = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, Math.min(cfg.mulB[1], 30)) : rng.randInt(cfg.mulB[0], cfg.mulB[1]);
+        ans = a * b;
+        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
+        q = a + ' x ' + b + ' =';
+      } else {
+        a = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, cfg.mulA[1]) : rng.randInt(cfg.mulA[0], cfg.mulA[1]);
+        b = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, Math.min(cfg.mulB[1], 30)) : rng.randInt(cfg.mulB[0], cfg.mulB[1]);
+        ans = b;
+        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
+        q = (a * b) + ' \u00f7 ' + a + ' =';
+      }
+      break;
+    } while (attempts < 20);
+
+    questions.push({ question: q, answer: ans, op: op, a: a, b: b });
+  }
+  return questions;
+}
+
+// ── State ─────────────────────────────────────────────────────────
+var _dailyCfg = null;
+var _dailyQuestions = [];
+var _dailyQIdx = 0;
+var _dailyScore = 0;
+var _dailyTimeLeft = 120;
+var _dailyTimerInterval = null;
+var _dailyAccepting = false;
+var _dailyCurrentAnswer = null;
+var _dailyCurrentOp = null;
+var _dailyCurrentA = null;
+var _dailyCurrentB = null;
+var _dailySkipTimeout = null;
+var _dailyDone = false;
+var _dailyInProgress = false;
+
+function getDailyStorageKey() {
+  return 'mathlete_daily_' + todayDateStr();
+}
+
+function getDailyResult() {
+  try { return JSON.parse(localStorage.getItem(getDailyStorageKey()) || 'null'); }
+  catch(e) { return null; }
+}
+
+function saveDailyResult(score) {
+  try { localStorage.setItem(getDailyStorageKey(), JSON.stringify({ score: score, ts: Date.now() })); } catch(e) {}
+}
+
+// ── Render info screen ────────────────────────────────────────────
+function initDailyChallenge() {
+  var dateStr = todayDateStr();
+  _dailyCfg = getDailyConfig(dateStr);
+  _dailyQuestions = generateDailyQuestions(_dailyCfg);
+  var cfg = _dailyCfg;
+
+  // Date label
+  var d = new Date(dateStr + 'T12:00:00');
+  var dateLabel = d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
+  document.getElementById('daily-date-label').textContent = dateLabel;
+
+  // Title — special Friday
+  var titleEl = document.getElementById('daily-title');
+  var subEl = document.getElementById('daily-sub');
+  if (cfg.isFriday && cfg.specialMode) {
+    titleEl.textContent = 'Special Friday';
+    subEl.textContent = cfg.specialMode.label + ' · 2 minutes';
+  } else {
+    titleEl.textContent = 'Daily Challenge';
+    subEl.textContent = '2 minutes · same for everyone';
+  }
+
+  // Difficulty bar
+  document.getElementById('daily-difficulty-fill').style.width = cfg.diffPct + '%';
+  document.getElementById('daily-day-label').textContent = cfg.dayName + ' — ' + cfg.diffLabel;
+
+  // Ops display
+  var opsEl = document.getElementById('daily-ops-display');
+  opsEl.innerHTML = '';
+  var opDetails = {
+    addition:       { sym: '+', label: 'Addition' },
+    subtraction:    { sym: '\u2212', label: 'Subtraction' },
+    multiplication: { sym: '\u00d7', label: 'Multiplication' },
+    division:       { sym: '\u00f7', label: 'Division' }
+  };
+  cfg.ops.forEach(function(op) {
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    var sym = document.createElement('span');
+    sym.style.cssText = 'font-size:1rem;font-weight:700;width:20px;text-align:center;flex-shrink:0;';
+    sym.textContent = opDetails[op].sym;
+    var lbl = document.createElement('span');
+    lbl.style.cssText = 'font-size:0.62rem;color:#888;';
+    lbl.textContent = opDetails[op].label;
+    if (cfg.specialMode && cfg.specialMode.primeOnly) lbl.textContent += ' (prime numbers only)';
+    if (cfg.specialMode && cfg.specialMode.oneDigit) lbl.textContent += ' (single-digit answers)';
+    row.appendChild(sym); row.appendChild(lbl);
+    opsEl.appendChild(row);
+  });
+
+  // Check if already played today — if so, jump straight to results
+  var result = getDailyResult();
+  if (result) {
+    _dailyScore = result.score;
+    document.getElementById('daily-info').style.display = 'none';
+    document.getElementById('daily-game').style.display = 'none';
+    document.getElementById('daily-results').style.display = 'flex';
+    document.getElementById('daily-final-score').textContent = result.score;
+    document.getElementById('daily-final-sub').textContent = '';
+    document.getElementById('daily-rank-label').textContent = 'Come back tomorrow for a new challenge';
+    var shareBtn = document.getElementById('daily-share-btn');
+    if (shareBtn) shareBtn.style.display = 'block';
+    loadDailyLeaderboard(false);
+    return;
+  }
+
+  document.getElementById('daily-info').style.display = 'flex';
+  document.getElementById('daily-game').style.display = 'none';
+  document.getElementById('daily-results').style.display = 'none';
+}
+
+// ── Game ──────────────────────────────────────────────────────────
+function startDailyChallenge() {
+  _dailyQIdx = 0;
+  _dailyScore = 0;
+  _dailyTimeLeft = 120;
+  _dailyAccepting = false;
+  _dailyDone = false;
+  _dailyInProgress = true;
+
+  document.getElementById('daily-info').style.display = 'none';
+  document.getElementById('daily-game').style.display = 'flex';
+  document.getElementById('daily-results').style.display = 'none';
+
+  var bar = document.getElementById('daily-timer-bar');
+  bar.style.transition = 'none'; bar.style.width = '100%';
+  bar.offsetHeight;
+  bar.style.transition = 'width 1s linear';
+
+  document.getElementById('daily-score-display').textContent = '0';
+  document.getElementById('daily-timer-display').textContent = '2:00';
+
+  nextDailyQuestion();
+  startDailyTimerInterval();
+}
+
+function startDailyTimerInterval() {
+  clearInterval(_dailyTimerInterval);
+  _dailyTimerInterval = setInterval(function() {
+    _dailyTimeLeft--;
+    var m = Math.floor(_dailyTimeLeft / 60);
+    var s = _dailyTimeLeft % 60;
+    document.getElementById('daily-timer-display').textContent = m + ':' + ('0' + s).slice(-2);
+    document.getElementById('daily-timer-bar').style.width = (_dailyTimeLeft / 120 * 100) + '%';
+    if (_dailyTimeLeft <= 0) endDailyChallenge();
+  }, 1000);
+}
+
+function nextDailyQuestion() {
+  hideDailySkip();
+  if (!_dailyQuestions || _dailyQIdx >= _dailyQuestions.length) { endDailyChallenge(); return; }
+  var q = _dailyQuestions[_dailyQIdx];
+  _dailyCurrentAnswer = q.answer;
+  _dailyCurrentOp = q.op;
+  _dailyCurrentA = q.a;
+  _dailyCurrentB = q.b;
+  document.getElementById('daily-question-display').textContent = q.question;
+  document.getElementById('daily-answer-input').value = '';
+  _dailyAccepting = true;
+  document.getElementById('daily-answer-input').focus();
+  _dailySkipTimeout = setTimeout(showDailySkip, 5000);
+}
+
+function showDailySkip() { document.getElementById('daily-skip-btn').style.display = 'inline-block'; }
+function hideDailySkip() {
+  document.getElementById('daily-skip-btn').style.display = 'none';
+  clearTimeout(_dailySkipTimeout);
+}
+
+function skipDailyQuestion() {
+  if (!_dailyAccepting) return;
+  hideDailySkip();
+  _dailyAccepting = false;
+  _dailyQIdx++;
+  nextDailyQuestion();
+}
+
+document.getElementById('daily-answer-input').addEventListener('keydown', function(e) {
+  if (!_dailyAccepting) return;
+  if (e.key === 'Backspace') {
+    hideDailySkip();
+    clearTimeout(_dailySkipTimeout);
+    _dailySkipTimeout = setTimeout(showDailySkip, 5000);
+  }
+});
+
+document.getElementById('daily-answer-input').addEventListener('input', function() {
+  if (!_dailyAccepting || !_dailyQuestions || !_dailyQuestions.length) return;
+  var val = this.value.trim();
+  if (val === '' || val === '-') return;
+  var typed = parseInt(val, 10);
+  if (isNaN(typed)) return;
+  if (typed === _dailyCurrentAnswer) {
+    hideDailySkip();
+    _dailyAccepting = false;
+    _dailyScore++;
+    _dailyQIdx++;
+    document.getElementById('daily-score-display').textContent = _dailyScore;
+    nextDailyQuestion();
+  }
+});
+
+// ── End & results ─────────────────────────────────────────────────
+function endDailyChallenge() {
+  if (_dailyDone) return;
+  _dailyDone = true;
+  _dailyInProgress = false;
+  clearInterval(_dailyTimerInterval);
+  hideDailySkip();
+  _dailyAccepting = false;
+
+  saveDailyResult(_dailyScore);
+  if (_dailyScore >= 5) {
+    var _dailyNewStreak = updateStreak();
+    if (_dailyNewStreak) { setTimeout(function() { showStreakAnimation(_dailyNewStreak); }, 600); }
+  }
+
+  document.getElementById('daily-game').style.display = 'none';
+  document.getElementById('daily-results').style.display = 'flex';
+  document.getElementById('daily-final-score').textContent = _dailyScore;
+  document.getElementById('daily-final-sub').textContent = '';
+  document.getElementById('daily-rank-label').textContent = '';
+  loadDailyLeaderboard(true);
+}
+
+// ── Leaderboard (stub — wired to Supabase later) ──────────────────
+function submitDailyScore(name, score, dateStr) {
+  return fetch(SUPA_URL + '/rest/v1/daily_scores', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({ name: name, score: score, challenge_date: dateStr, device_id: getDeviceId() })
+  });
+}
+
+function showDailyNameModal(score, dateStr) {
+  _submitFn = function(name) { return submitDailyScore(name, score, dateStr); };
+  document.getElementById('modal-score').textContent = score;
+  document.getElementById('modal-sub').textContent = 'Daily Challenge · ' + (_dailyCfg ? _dailyCfg.dayName : '');
+  var uname = getUsername();
+  if (uname) { setUnameMode('existing'); document.getElementById('uname-display').textContent = uname; }
+  else { setUnameMode('create'); document.getElementById('handle-input').value = ''; updateUnamePreview(); }
+  document.getElementById('name-modal').style.display = 'flex';
+  if (!uname) setTimeout(function() { var h = document.getElementById('handle-input'); if (h) h.focus(); }, 50);
+}
+
+function renderDailyLbRows(rows) {
+  var list = document.getElementById('daily-lb-list');
+  var loading = document.getElementById('daily-lb-loading');
+  var empty = document.getElementById('daily-lb-empty');
+  list.innerHTML = '';
+  loading.style.display = 'none';
+
+  if (!Array.isArray(rows) || !rows.length) {
+    empty.style.display = 'block';
+    empty.textContent = 'No scores yet today — be the first!';
+    return;
+  }
+  empty.style.display = 'none';
+
+  rows = rows.slice().sort(function(a, b) { return b.score - a.score; }).slice(0, 20);
+  var myName = getUsername();
+  rows.forEach(function(row, i) {
+    var el = document.createElement('div'); el.className = 'lb-row';
+    var isYou = myName && row.name.toLowerCase() === myName.toLowerCase();
+    el.innerHTML =
+      '<div class="lb-rank' + (i < 3 ? ' top3' : '') + '">' + (i + 1) + '</div>' +
+      '<div class="lb-name' + (isYou ? ' you' : '') + '">' + escHtml(row.name) + (isYou ? ' (you)' : '') + '</div>' +
+      '<div class="lb-score">' + row.score + '</div>';
+    list.appendChild(el);
+  });
+
+  // Rank label for the player, if they're on the board
+  var myRow = rows.find ? rows.find(function(r) { return myName && r.name.toLowerCase() === myName.toLowerCase(); }) : null;
+  if (!myRow) {
+    for (var ri = 0; ri < rows.length; ri++) { if (myName && rows[ri].name.toLowerCase() === myName.toLowerCase()) { myRow = rows[ri]; break; } }
+  }
+}
+
+function loadDailyLeaderboard(shouldSubmit) {
+  var list = document.getElementById('daily-lb-list');
+  var loading = document.getElementById('daily-lb-loading');
+  var empty = document.getElementById('daily-lb-empty');
+  list.innerHTML = '';
+  loading.style.display = 'block';
+  empty.style.display = 'none';
+
+  var dateStr = todayDateStr();
+
+  // Offer to submit the score first (name modal), on the results transition only
+  if (shouldSubmit && _dailyScore > 0) {
+    showDailyNameModal(_dailyScore, dateStr);
+  }
+
+  fetch(SUPA_URL + '/rest/v1/daily_scores?challenge_date=eq.' + dateStr + '&select=name,score&order=score.desc&limit=50', {
+    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Accept': 'application/json' }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(rows) { renderDailyLbRows(rows); })
+  .catch(function() {
+    loading.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'Could not load leaderboard.';
+  });
+}
+
+// ── Share ─────────────────────────────────────────────────────────
+function shareDailyScore() {
+  var cfg = _dailyCfg || getDailyConfig(todayDateStr());
+  var opIcons = { addition: '+', subtraction: '\u2212', multiplication: '\u00d7', division: '\u00f7' };
+  var opsStr = cfg.ops.map(function(o) { return opIcons[o] || o; }).join(' ');
+  var text =
+    'Mathlete Daily \ud83d\uddd3\ufe0f\n' +
+    cfg.dayName + ' \u00b7 ' + cfg.diffLabel + '\n' +
+    '\ud83c\udfaf ' + _dailyScore + ' correct in 2 min\n' +
+    opsStr + '\n' +
+    'nerdlegame.com/mathlete';
+
+  if (navigator.share) {
+    navigator.share({ text: text }).catch(function() {});
+  } else if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() {
+      var el = document.getElementById('daily-share-copied');
+      if (el) { el.style.display = 'block'; setTimeout(function() { el.style.display = 'none'; }, 2500); }
+    });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    var el = document.getElementById('daily-share-copied');
+    if (el) { el.style.display = 'block'; setTimeout(function() { el.style.display = 'none'; }, 2500); }
+  }
+}
+
+
+
+// ── Pause/resume when switching away from the Daily tab mid-game ──
+function pauseDailyChallenge() {
+  if (!_dailyInProgress) return;
+  clearInterval(_dailyTimerInterval);
+  _dailyAccepting = false;
+  hideDailySkip();
+}
+
+function resumeDailyChallenge() {
+  if (!_dailyInProgress) return;
+  document.getElementById('daily-info').style.display = 'none';
+  document.getElementById('daily-results').style.display = 'none';
+  document.getElementById('daily-game').style.display = 'flex';
+  // Re-render current timer/score state
+  var m = Math.floor(_dailyTimeLeft / 60), s = _dailyTimeLeft % 60;
+  document.getElementById('daily-timer-display').textContent = m + ':' + ('0' + s).slice(-2);
+  document.getElementById('daily-timer-bar').style.transition = 'none';
+  document.getElementById('daily-timer-bar').style.width = (_dailyTimeLeft / 120 * 100) + '%';
+  document.getElementById('daily-timer-bar').offsetHeight;
+  document.getElementById('daily-timer-bar').style.transition = 'width 1s linear';
+  document.getElementById('daily-score-display').textContent = _dailyScore;
+  if (_dailyQuestions && _dailyQuestions[_dailyQIdx]) {
+    document.getElementById('daily-question-display').textContent = _dailyQuestions[_dailyQIdx].question;
+    document.getElementById('daily-answer-input').value = '';
+  }
+  _dailyAccepting = true;
+  document.getElementById('daily-answer-input').focus();
+  _dailySkipTimeout = setTimeout(showDailySkip, 5000);
+  startDailyTimerInterval();
+}
+
+
 // Expose to window for inline onclick handlers
 window.startGame = startGame;
 window.quitGame = quitGame;
+window.startDailyChallenge = startDailyChallenge;
+window.pauseDailyChallenge = pauseDailyChallenge;
+window.resumeDailyChallenge = resumeDailyChallenge;
+window.skipDailyQuestion = skipDailyQuestion;
+window.shareDailyScore = shareDailyScore;
 window.askQuit = askQuit;
 window.keepPlaying = keepPlaying;
 window.skipQuestion = skipQuestion;
@@ -3732,6 +4290,8 @@ window.closeSkipModal = closeSkipModal;
 window.doSkip = doSkip;
 window.startLearnLevel = startLearnLevel;
 window.retryLearnLevel = retryLearnLevel;
+// Init daily on load (deferred so all functions are defined)
+if (document.getElementById('page-daily') && document.getElementById('page-daily').classList.contains('active')) { initDailyChallenge(); }
 })();
 });
 </script>
@@ -3767,7 +4327,8 @@ window.retryLearnLevel = retryLearnLevel;
 </div>
 
 <nav class="nav">
-  <button class="nav-btn active" data-page="play">Play</button>
+  <button class="nav-btn active" data-page="daily">Daily</button>
+  <button class="nav-btn" data-page="play">Play</button>
   <button class="nav-btn" data-page="results">Results</button>
   <button class="nav-btn" data-page="history">History</button>
   <button class="nav-btn" data-page="practice">Practise</button>
@@ -3776,7 +4337,7 @@ window.retryLearnLevel = retryLearnLevel;
 </nav>
 
 <!-- PLAY -->
-<div class="page active" id="page-play">
+<div class="page" id="page-play">
   <!-- Intro box — persists above config + game; only the illustration hides during play -->
   <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:12px 16px;margin-bottom:10px;position:relative">
     <button onclick="dismissWelcome()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
@@ -3859,6 +4420,70 @@ window.retryLearnLevel = retryLearnLevel;
   </div>
 </div>
 
+<!-- DAILY CHALLENGE -->
+<div class="page active" id="page-daily">
+
+  <!-- Pre-game info screen -->
+  <div id="daily-info" style="width:100%;display:flex;flex-direction:column;align-items:center;">
+    <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:6px" id="daily-date-label"></div>
+    <div style="font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:4px" id="daily-title">Daily Challenge</div>
+    <div style="font-size:0.65rem;color:#999;margin-bottom:20px" id="daily-sub">2 minutes · same for everyone</div>
+
+    <!-- Difficulty bar -->
+    <div style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:16px;">
+      <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px">Today's difficulty</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:0.6rem;color:#999;width:28px;flex-shrink:0">Easy</div>
+        <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div id="daily-difficulty-fill" style="height:100%;border-radius:3px;background:var(--text);transition:width 0.6s ease;width:0%"></div>
+        </div>
+        <div style="font-size:0.6rem;color:#999;width:28px;flex-shrink:0;text-align:right">Hard</div>
+      </div>
+      <div style="font-size:0.62rem;font-weight:700;color:var(--text);margin-top:8px;text-align:center" id="daily-day-label"></div>
+    </div>
+
+    <!-- Operations/mode -->
+    <div style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:20px;">
+      <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px">Today's operations</div>
+      <div id="daily-ops-display" style="display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+
+    <button class="start-btn" style="width:100%;margin-bottom:8px" id="daily-start-btn" onclick="startDailyChallenge()">Start challenge</button>
+  </div>
+
+  <!-- Game screen (reuses main game style) -->
+  <div id="daily-game" style="display:none;width:100%;flex-direction:column;align-items:center;">
+    <div class="timer-row">
+      <div class="hud-cell"><span class="hud-key">Time</span><span class="hud-val" id="daily-timer-display">2:00</span></div>
+      <div class="timer-bar-wrap"><div class="timer-bar" id="daily-timer-bar"></div></div>
+      <div class="hud-cell hud-right"><span class="hud-key">Score</span><span class="hud-val" id="daily-score-display">0</span></div>
+    </div>
+    <div class="question" id="daily-question-display"></div>
+    <input class="answer-input" id="daily-answer-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
+    <div id="daily-skip-wrap" style="min-height:28px;margin-top:12px;text-align:center">
+      <button id="daily-skip-btn" onclick="skipDailyQuestion()" style="display:none;background:none;border:none;font-family:'Roboto Mono',monospace;font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#bbb;cursor:pointer;padding:4px 8px;border-bottom:1px solid var(--border);">Skip</button>
+    </div>
+  </div>
+
+  <!-- Results screen -->
+  <div id="daily-results" style="display:none;width:100%;flex-direction:column;align-items:center;">
+    <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:6px">Today's result</div>
+    <div style="font-size:clamp(3rem,14vw,5.5rem);font-weight:700;letter-spacing:-3px;line-height:1;margin-bottom:4px" id="daily-final-score">0</div>
+    <div style="font-size:0.7rem;color:#999;margin-bottom:20px" id="daily-final-sub"></div>
+    <div style="font-size:0.62rem;color:#999;margin-bottom:24px;text-align:center;width:100%" id="daily-rank-label"></div>
+    <!-- Leaderboard -->
+    <div style="width:100%;margin-top:4px">
+      <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:8px;text-align:center">Today's leaderboard</div>
+      <div id="daily-lb-list" style="display:flex;flex-direction:column;gap:2px"></div>
+      <div id="daily-lb-loading" style="font-size:0.65rem;color:#bbb;text-align:center;padding:20px 0">Loading...</div>
+      <div id="daily-lb-empty" style="display:none;font-size:0.65rem;color:#bbb;text-align:center;padding:20px 0">No scores yet today.</div>
+    </div>
+    <button class="btn-outline" id="daily-share-btn" onclick="shareDailyScore()" style="width:100%;margin-top:16px">Share result</button>
+    <div id="daily-share-copied" style="display:none;font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;text-align:center;margin-top:8px;padding:6px">Copied ✓</div>
+  </div>
+
+</div>
+
 <!-- RESULTS -->
 <div class="page" id="page-results">
   <div class="result-label">Final Score</div>
@@ -3909,12 +4534,12 @@ window.retryLearnLevel = retryLearnLevel;
     <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:14px">High scores <span style="font-size:0.5rem;color:#bbb;letter-spacing:1px">(default settings only)</span></div>
     <div id="highscore-rows" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
-  <div id="total-correct-banner" style="width:100%;background:white;border:1px solid #ddd;padding:14px 18px;margin-bottom:16px;display:none">
+  <div id="total-correct-banner" style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:16px;display:none">
     <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Total correct answers</div>
     <div style="font-size:2rem;font-weight:700;letter-spacing:-1px;line-height:1" id="total-correct-val">0</div>
     <div style="font-size:0.55rem;color:#bbb;margin-top:3px">all time</div>
   </div>
-  <div id="streak-banner" style="width:100%;background:white;border:1px solid #ddd;padding:14px 18px;margin-bottom:16px;display:none">
+  <div id="streak-banner" style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:16px;display:none">
     <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:4px">Daily streak</div>
     <div style="display:flex;align-items:baseline;gap:8px">
       <div style="font-size:2rem;font-weight:700;letter-spacing:-1px;line-height:1" id="streak-val">0</div>
@@ -3932,7 +4557,7 @@ window.retryLearnLevel = retryLearnLevel;
   <div class="graph-wrap"><div class="graph-title">Accuracy % over time</div><canvas id="graph-acc" height="120"></canvas></div>
   <div class="graph-wrap"><div class="graph-title">Avg time per answer (s)</div><canvas id="graph-time" height="120"></canvas></div>
   <!-- ML Skill Profile -->
-  <div id="skill-profile" style="width:100%;background:white;border:1px solid #ddd;padding:16px 18px;margin-bottom:16px;display:none">
+  <div id="skill-profile" style="width:100%;background:var(--surface);border:1px solid var(--border);padding:16px 18px;margin-bottom:16px;display:none">
     <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:14px">Operation ability</div>
     <div id="skill-rows" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
