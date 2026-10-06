@@ -847,12 +847,7 @@ function showPage(name) {
   if (name === 'leaderboard') initLeaderboard();
   if (name === 'play') { updateFirstTimeState(); }
   if (name === 'learn') { renderLearnMap(); }
-  if (name === 'daily') {
-    if (_dailyInProgress) { resumeDailyChallenge(); } else { initDailyChallenge(); }
-  } else {
-    // leaving the daily tab — pause if a game is in progress
-    if (typeof _dailyInProgress !== 'undefined' && _dailyInProgress) pauseDailyChallenge();
-  }
+  if (name === 'daily') { initDailyChallenge(); }
 }
 
 // ================================================================
@@ -2188,9 +2183,6 @@ function closeModal() {
   document.getElementById('name-modal').style.display = 'none';
   _submitFn = null;
   if (_pendingStreakN) { var sn = _pendingStreakN; _pendingStreakN = 0; showStreakAnimation(sn); }
-  // Refresh daily leaderboard if visible, to reflect the just-submitted score
-  var dailyResults = document.getElementById('daily-results');
-  if (dailyResults && dailyResults.style.display !== 'none') { loadDailyLeaderboard(false); }
 }
 
 // Profanity blocklist. Handles are max 3 chars, so short entries below do the
@@ -3193,51 +3185,28 @@ function todayStr() {
 }
 
 function loadStreak() {
-  try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null, activeDates: [] }; }
-  catch(e) { return { streak: 0, lastDate: null, activeDates: [] }; }
+  try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null }; }
+  catch(e) { return { streak: 0, lastDate: null }; }
 }
 
 function saveStreak(s) {
   try { localStorage.setItem('arith_streak', JSON.stringify(s)); } catch(e) {}
 }
 
-function dateStrMinusDays(n) {
-  var d = new Date();
-  d.setDate(d.getDate() - n);
-  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
-}
-
-// Streak logic: rolling 7-day window. Streak continues as long as at least
-// 5 of the last 7 calendar days (including today) were active — i.e. up to
-// 2 "freeze" days per week are forgiven. Streak only resets if activity
-// drops below 5-in-7.
 function updateStreak() {
   var s = loadStreak();
-  if (!s.activeDates) s.activeDates = [];
   var today = todayStr();
-
-  if (s.lastDate !== today) {
-    // Record today as active (dedup-safe)
-    if (s.activeDates.indexOf(today) === -1) s.activeDates.push(today);
-    // Keep only last 60 days of history (enough for windowing, avoids unbounded growth)
-    var cutoff = dateStrMinusDays(60);
-    s.activeDates = s.activeDates.filter(function(d) { return d >= cutoff; });
-
-    // Count active days within the rolling 7-day window (today + previous 6)
-    var windowDates = [];
-    for (var i = 0; i < 7; i++) windowDates.push(dateStrMinusDays(i));
-    var activeInWindow = windowDates.filter(function(d) { return s.activeDates.indexOf(d) !== -1; }).length;
-
-    if (activeInWindow >= 5) {
-      s.streak = (s.streak || 0) + 1;
-    } else {
-      s.streak = 1; // window activity too low — restart
-    }
-    s.lastDate = today;
-    saveStreak(s);
-    return s.streak;
+  if (s.lastDate === today) return false; // already counted today
+  var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+  var yStr = yesterday.getFullYear() + '-' + ('0'+(yesterday.getMonth()+1)).slice(-2) + '-' + ('0'+yesterday.getDate()).slice(-2);
+  if (s.lastDate === yStr) {
+    s.streak = (s.streak || 0) + 1;
+  } else {
+    s.streak = 1;
   }
-  return false; // already counted today
+  s.lastDate = today;
+  saveStreak(s);
+  return s.streak; // return new streak value
 }
 
 function renderStreak() {
@@ -3898,7 +3867,6 @@ var _dailyCurrentA = null;
 var _dailyCurrentB = null;
 var _dailySkipTimeout = null;
 var _dailyDone = false;
-var _dailyInProgress = false;
 
 function getDailyStorageKey() {
   return 'mathlete_daily_' + todayDateStr();
@@ -3992,7 +3960,6 @@ function startDailyChallenge() {
   _dailyTimeLeft = 120;
   _dailyAccepting = false;
   _dailyDone = false;
-  _dailyInProgress = true;
 
   document.getElementById('daily-info').style.display = 'none';
   document.getElementById('daily-game').style.display = 'flex';
@@ -4007,11 +3974,7 @@ function startDailyChallenge() {
   document.getElementById('daily-timer-display').textContent = '2:00';
 
   nextDailyQuestion();
-  startDailyTimerInterval();
-}
 
-function startDailyTimerInterval() {
-  clearInterval(_dailyTimerInterval);
   _dailyTimerInterval = setInterval(function() {
     _dailyTimeLeft--;
     var m = Math.floor(_dailyTimeLeft / 60);
@@ -4080,16 +4043,11 @@ document.getElementById('daily-answer-input').addEventListener('input', function
 function endDailyChallenge() {
   if (_dailyDone) return;
   _dailyDone = true;
-  _dailyInProgress = false;
   clearInterval(_dailyTimerInterval);
   hideDailySkip();
   _dailyAccepting = false;
 
   saveDailyResult(_dailyScore);
-  if (_dailyScore >= 5) {
-    var _dailyNewStreak = updateStreak();
-    if (_dailyNewStreak) { setTimeout(function() { showStreakAnimation(_dailyNewStreak); }, 600); }
-  }
 
   document.getElementById('daily-game').style.display = 'none';
   document.getElementById('daily-results').style.display = 'flex';
@@ -4100,88 +4058,17 @@ function endDailyChallenge() {
 }
 
 // ── Leaderboard (stub — wired to Supabase later) ──────────────────
-function submitDailyScore(name, score, dateStr) {
-  return fetch(SUPA_URL + '/rest/v1/daily_scores', {
-    method: 'POST',
-    headers: {
-      'apikey': SUPA_KEY,
-      'Authorization': 'Bearer ' + SUPA_KEY,
-      'Content-Type': 'application/json',
-      'Prefer': 'return=minimal'
-    },
-    body: JSON.stringify({ name: name, score: score, challenge_date: dateStr, device_id: getDeviceId() })
-  });
-}
-
-function showDailyNameModal(score, dateStr) {
-  _submitFn = function(name) { return submitDailyScore(name, score, dateStr); };
-  document.getElementById('modal-score').textContent = score;
-  document.getElementById('modal-sub').textContent = 'Daily Challenge · ' + (_dailyCfg ? _dailyCfg.dayName : '');
-  var uname = getUsername();
-  if (uname) { setUnameMode('existing'); document.getElementById('uname-display').textContent = uname; }
-  else { setUnameMode('create'); document.getElementById('handle-input').value = ''; updateUnamePreview(); }
-  document.getElementById('name-modal').style.display = 'flex';
-  if (!uname) setTimeout(function() { var h = document.getElementById('handle-input'); if (h) h.focus(); }, 50);
-}
-
-function renderDailyLbRows(rows) {
+function loadDailyLeaderboard(submitScore) {
   var list = document.getElementById('daily-lb-list');
   var loading = document.getElementById('daily-lb-loading');
   var empty = document.getElementById('daily-lb-empty');
   list.innerHTML = '';
   loading.style.display = 'none';
-
-  if (!Array.isArray(rows) || !rows.length) {
-    empty.style.display = 'block';
-    empty.textContent = 'No scores yet today — be the first!';
-    return;
-  }
   empty.style.display = 'none';
 
-  rows = rows.slice().sort(function(a, b) { return b.score - a.score; }).slice(0, 20);
-  var myName = getUsername();
-  rows.forEach(function(row, i) {
-    var el = document.createElement('div'); el.className = 'lb-row';
-    var isYou = myName && row.name.toLowerCase() === myName.toLowerCase();
-    el.innerHTML =
-      '<div class="lb-rank' + (i < 3 ? ' top3' : '') + '">' + (i + 1) + '</div>' +
-      '<div class="lb-name' + (isYou ? ' you' : '') + '">' + escHtml(row.name) + (isYou ? ' (you)' : '') + '</div>' +
-      '<div class="lb-score">' + row.score + '</div>';
-    list.appendChild(el);
-  });
-
-  // Rank label for the player, if they're on the board
-  var myRow = rows.find ? rows.find(function(r) { return myName && r.name.toLowerCase() === myName.toLowerCase(); }) : null;
-  if (!myRow) {
-    for (var ri = 0; ri < rows.length; ri++) { if (myName && rows[ri].name.toLowerCase() === myName.toLowerCase()) { myRow = rows[ri]; break; } }
-  }
-}
-
-function loadDailyLeaderboard(shouldSubmit) {
-  var list = document.getElementById('daily-lb-list');
-  var loading = document.getElementById('daily-lb-loading');
-  var empty = document.getElementById('daily-lb-empty');
-  list.innerHTML = '';
-  loading.style.display = 'block';
-  empty.style.display = 'none';
-
-  var dateStr = todayDateStr();
-
-  // Offer to submit the score first (name modal), on the results transition only
-  if (shouldSubmit && _dailyScore > 0) {
-    showDailyNameModal(_dailyScore, dateStr);
-  }
-
-  fetch(SUPA_URL + '/rest/v1/daily_scores?challenge_date=eq.' + dateStr + '&select=name,score&order=score.desc&limit=50', {
-    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Accept': 'application/json' }
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(rows) { renderDailyLbRows(rows); })
-  .catch(function() {
-    loading.style.display = 'none';
-    empty.style.display = 'block';
-    empty.textContent = 'Could not load leaderboard.';
-  });
+  // Supabase not set up yet — show placeholder
+  empty.style.display = 'block';
+  empty.textContent = 'Leaderboard coming soon — Supabase setup needed.';
 }
 
 // ── Share ─────────────────────────────────────────────────────────
@@ -4213,45 +4100,10 @@ function shareDailyScore() {
 }
 
 
-
-// ── Pause/resume when switching away from the Daily tab mid-game ──
-function pauseDailyChallenge() {
-  if (!_dailyInProgress) return;
-  clearInterval(_dailyTimerInterval);
-  _dailyAccepting = false;
-  hideDailySkip();
-}
-
-function resumeDailyChallenge() {
-  if (!_dailyInProgress) return;
-  document.getElementById('daily-info').style.display = 'none';
-  document.getElementById('daily-results').style.display = 'none';
-  document.getElementById('daily-game').style.display = 'flex';
-  // Re-render current timer/score state
-  var m = Math.floor(_dailyTimeLeft / 60), s = _dailyTimeLeft % 60;
-  document.getElementById('daily-timer-display').textContent = m + ':' + ('0' + s).slice(-2);
-  document.getElementById('daily-timer-bar').style.transition = 'none';
-  document.getElementById('daily-timer-bar').style.width = (_dailyTimeLeft / 120 * 100) + '%';
-  document.getElementById('daily-timer-bar').offsetHeight;
-  document.getElementById('daily-timer-bar').style.transition = 'width 1s linear';
-  document.getElementById('daily-score-display').textContent = _dailyScore;
-  if (_dailyQuestions && _dailyQuestions[_dailyQIdx]) {
-    document.getElementById('daily-question-display').textContent = _dailyQuestions[_dailyQIdx].question;
-    document.getElementById('daily-answer-input').value = '';
-  }
-  _dailyAccepting = true;
-  document.getElementById('daily-answer-input').focus();
-  _dailySkipTimeout = setTimeout(showDailySkip, 5000);
-  startDailyTimerInterval();
-}
-
-
 // Expose to window for inline onclick handlers
 window.startGame = startGame;
 window.quitGame = quitGame;
 window.startDailyChallenge = startDailyChallenge;
-window.pauseDailyChallenge = pauseDailyChallenge;
-window.resumeDailyChallenge = resumeDailyChallenge;
 window.skipDailyQuestion = skipDailyQuestion;
 window.shareDailyScore = shareDailyScore;
 window.askQuit = askQuit;
