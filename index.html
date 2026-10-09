@@ -694,6 +694,10 @@ body { background: var(--bg); color: var(--text); }
   .key { height: 41px; font-size: 1.2rem; border-radius: 8px; }
   .key-del { font-size: 1.1rem; }
 }
+/* Daily Challenge rules list */
+.rules-list { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 0.62rem; line-height: 1.6; color: var(--muted); }
+.rules-list li { display: flex; gap: 8px; }
+.rules-list li::before { content: '\2022'; color: var(--faint); flex-shrink: 0; }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -835,6 +839,8 @@ document.querySelectorAll('.nav-btn').forEach(function(btn) {
 });
 
 function showPage(name) {
+  // A Daily Challenge in progress can't be left (it has no pause); Quit ends it
+  if (_dailyInProgress && name !== 'daily') return;
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
   document.getElementById('page-' + name).classList.add('active');
@@ -847,7 +853,7 @@ function showPage(name) {
   if (name === 'leaderboard') initLeaderboard();
   if (name === 'play') { updateFirstTimeState(); }
   if (name === 'learn') { renderLearnMap(); }
-  if (name === 'daily') { initDailyChallenge(); }
+  if (name === 'daily' && !_dailyInProgress) initDailyChallenge();
 }
 
 // ================================================================
@@ -1088,15 +1094,32 @@ function nextQuestion() {
   startPaceTicker();
 }
 
+// The Quit dialog is shared by the main game and the Daily Challenge.
+function setQuitConfirmMode(daily) {
+  document.getElementById('quit-confirm-title').textContent = daily ? 'End challenge?' : 'Quit game?';
+  document.getElementById('quit-confirm-sub').textContent = daily
+    ? 'You only get one attempt a day, so your score so far will be your final score.'
+    : "Your score won't be saved.";
+  document.getElementById('quit-confirm-quit').textContent = daily ? 'End challenge' : 'Quit';
+}
+
 // Quitting is guarded by a confirm, so a mis-tap (or the hamburger) can't lose a
 // game. Opening the confirm pauses the clock; "Keep playing" resumes it.
 function askQuit() {
   if (!document.documentElement.classList.contains('playing')) return;
+  if (_dailyInProgress) {
+    // Daily Challenge: no pausing, the clock keeps running behind the dialog
+    setQuitConfirmMode(true);
+    document.getElementById('quit-confirm').style.display = 'flex';
+    return;
+  }
+  setQuitConfirmMode(false);
   clearInterval(timerInterval); stopPaceTicker(); hideSkipBtn(); accepting = false;
   document.getElementById('quit-confirm').style.display = 'flex';
 }
 function keepPlaying() {
   document.getElementById('quit-confirm').style.display = 'none';
+  if (_dailyInProgress) { var di = document.getElementById('daily-answer-input'); if (di) di.focus(); return; }
   accepting = true;
   _startTimer(); startPaceTicker();
   var inp = document.getElementById('answer-input'); if (inp) inp.focus();
@@ -1104,6 +1127,7 @@ function keepPlaying() {
 
 function quitGame() {
   document.getElementById('quit-confirm').style.display = 'none';
+  if (_dailyInProgress) { endDailyChallenge('quit'); return; }
   hideSkipBtn();
   clearInterval(timerInterval); stopPaceTicker(); accepting = false;
   document.documentElement.classList.remove('playing');
@@ -1214,8 +1238,6 @@ function endGame() {
   saveData(data);
   gaEvent('game_complete', { mode: 'play', score: score, duration: duration, accuracy: acc, avg_time_ms: Math.round(avgTime), ops: Array.from(selectedOps).sort().join(',') });
   _lastGameMeta = { mode: 'play', score: score, duration: duration, accuracy: acc, avgTime: Math.round(avgTime), ops: Array.from(selectedOps).sort().join(',') };
-  var _newStreak = updateStreak();
-  if (_newStreak) _pendingStreakN = _newStreak;
 
   document.documentElement.classList.remove('playing');
   document.getElementById('game-screen').style.display = 'none';
@@ -2183,6 +2205,9 @@ function closeModal() {
   document.getElementById('name-modal').style.display = 'none';
   _submitFn = null;
   if (_pendingStreakN) { var sn = _pendingStreakN; _pendingStreakN = 0; showStreakAnimation(sn); }
+  // Refresh daily leaderboard if visible, to reflect the just-submitted score
+  var dailyResults = document.getElementById('daily-results');
+  if (dailyResults && dailyResults.style.display !== 'none') { loadDailyLeaderboard(false); }
 }
 
 // Profanity blocklist. Handles are max 3 chars, so short entries below do the
@@ -3087,8 +3112,6 @@ function endLearnLevel() {
   // If they skipped ahead, mark intermediate levels as seen (not starred)
   if (passed && lv.n > ld.unlocked + 5) { /* skipped ahead — unlocked is already set above */ }
   saveLearnData(ld);
-  var _newStreakL = updateStreak();
-  if (_newStreakL) { setTimeout(function() { showStreakAnimation(_newStreakL); }, 600); }
 
   // Show result
   document.getElementById('learn-game-view').style.display = 'none';
@@ -3153,10 +3176,30 @@ function dismissWelcome() {
   try { localStorage.setItem('arith_welcome_dismissed', '1'); } catch(e) {}
 }
 
+// Number of Daily Challenge attempts saved on this device (one record per day).
+function dailyPlayCount() {
+  var n = 0;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (k && k.indexOf('mathlete_daily_') === 0) n++;
+    }
+  } catch(e) {}
+  return n;
+}
+
+// A first-time visitor has no games, no Daily attempts and no streak.
+function isFirstVisit() {
+  var s = loadStreak();
+  return loadData().games.length === 0 && dailyPlayCount() === 0 && !s.streak;
+}
+
 function updateFirstTimeState() {
-  var data = loadData();
-  var hasGames = data.games.length > 0;
-  var hasTwoGames = data.games.length >= 2;
+  // A Daily attempt counts as a game for unlocking Results, History and Practise
+  var generalGames = loadData().games.length;
+  var played = generalGames + dailyPlayCount();
+  var hasGames = played > 0;
+  var hasTwoGames = played >= 2;
 
   // Welcome banner: show until first game played
   var banner = document.getElementById('welcome-banner');
@@ -3169,7 +3212,8 @@ function updateFirstTimeState() {
   var historyBtn = document.querySelector('.nav-btn[data-page="history"]');
   var practiseBtn = document.querySelector('.nav-btn[data-page="practice"]');
 
-  if (resultsBtn)  { resultsBtn.classList.toggle('nav-locked', !hasGames);  resultsBtn.title  = hasGames    ? '' : 'Unlocked after 1 game'; }
+  // Results is for general play only, so Daily attempts don't unlock it
+  if (resultsBtn)  { resultsBtn.classList.toggle('nav-locked', generalGames < 1);  resultsBtn.title  = generalGames >= 1 ? '' : 'Unlocked after 1 game'; }
   if (historyBtn)  { historyBtn.classList.toggle('nav-locked', !hasGames);  historyBtn.title  = hasGames    ? '' : 'Unlocked after 1 game'; }
   if (practiseBtn) { practiseBtn.classList.toggle('nav-locked', !hasTwoGames); practiseBtn.title = hasTwoGames ? '' : 'Unlocked after 2 games'; }
 }
@@ -3185,46 +3229,129 @@ function todayStr() {
 }
 
 function loadStreak() {
-  try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null }; }
-  catch(e) { return { streak: 0, lastDate: null }; }
+  try { return JSON.parse(localStorage.getItem('arith_streak') || 'null') || { streak: 0, lastDate: null, activeDates: [], streakStart: null }; }
+  catch(e) { return { streak: 0, lastDate: null, activeDates: [], streakStart: null }; }
 }
 
 function saveStreak(s) {
   try { localStorage.setItem('arith_streak', JSON.stringify(s)); } catch(e) {}
 }
 
+function dateStrMinusDays(n) {
+  var d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+// Shift a YYYY-MM-DD string by a number of days (negative = earlier).
+// Built at noon so DST changes can't move it onto a neighbouring date.
+function shiftDateStr(dateStr, delta) {
+  var p = dateStr.split('-');
+  var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10), 12, 0, 0);
+  d.setDate(d.getDate() + delta);
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+// Streak rules:
+//  - Every qualifying day played adds 1, so new players count up from day one.
+//  - A streak survives up to 2 missed days in any 7. Days before the streak began
+//    can't be "missed", so a brand-new streak is protected from day one too.
+//  - Old saves are upgraded on the fly: activeDates is rebuilt from lastDate
+//    going back min(streak, 7) days, and streakStart is derived from the length,
+//    so existing streaks are kept instead of wiped.
+//  - updateStreak() and the displayed streak share streakIsAlive(), so the number
+//    shown is always the one the next qualifying play would continue from.
+
+// Days the player was active. Old saves never stored them, so rebuild from lastDate.
+function streakActiveDates(s) {
+  if (s.activeDates && s.activeDates.length) return s.activeDates.slice();
+  var out = [];
+  if (s.lastDate && s.streak > 0) {
+    var back = Math.min(s.streak, 7);
+    for (var k = 0; k < back; k++) out.push(shiftDateStr(s.lastDate, -k));
+  }
+  return out;
+}
+
+// Can this streak still be continued as of `today`? Today counts as playable
+// unless todayLost says today's Daily was already used without counting.
+function streakIsAlive(s, today, todayLost) {
+  if (!s || !(s.streak > 0) || !s.lastDate) return false;
+  if (s.lastDate === today) return true;  // already counted today
+  var start = s.streakStart || shiftDateStr(s.lastDate, -(s.streak - 1));
+  var active = streakActiveDates(s);
+  var missed = (todayLost && today >= start) ? 1 : 0;
+  for (var i = 1; i < 7; i++) {           // the 6 days before today
+    var day = shiftDateStr(today, -i);
+    if (day < start) break;               // before the streak began
+    if (active.indexOf(day) === -1) missed++;
+  }
+  return missed <= 2;
+}
+
 function updateStreak() {
   var s = loadStreak();
   var today = todayStr();
   if (s.lastDate === today) return false; // already counted today
-  var yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-  var yStr = yesterday.getFullYear() + '-' + ('0'+(yesterday.getMonth()+1)).slice(-2) + '-' + ('0'+yesterday.getDate()).slice(-2);
-  if (s.lastDate === yStr) {
+
+  var alive = streakIsAlive(s, today, false);  // the player is completing today's Daily right now
+
+  var start = s.streakStart || (s.lastDate && s.streak > 0 ? shiftDateStr(s.lastDate, -(s.streak - 1)) : today);
+  s.activeDates = streakActiveDates(s);
+  if (s.activeDates.indexOf(today) === -1) s.activeDates.push(today);
+  // Keep 60 days of history: plenty for the 7-day window, avoids unbounded growth
+  var cutoff = shiftDateStr(today, -60);
+  s.activeDates = s.activeDates.filter(function(d) { return d >= cutoff; });
+
+  if (alive) {
     s.streak = (s.streak || 0) + 1;
+    s.streakStart = start;
   } else {
-    s.streak = 1;
+    s.streak = 1;          // the streak lapsed (or this is the first day)
+    s.streakStart = today;
   }
+
   s.lastDate = today;
   saveStreak(s);
-  return s.streak; // return new streak value
+  return s.streak;
+}
+
+// Has today's Daily already been started or finished?
+function dailyAttemptedToday() {
+  try { return localStorage.getItem('mathlete_daily_' + todayStr()) !== null; } catch(e) { return false; }
+}
+
+// The streak to show right now: 0 once it has lapsed, even if the saved number is higher.
+function currentStreak() {
+  var s = loadStreak();
+  var today = todayStr();
+  var todayLost = dailyAttemptedToday() && s.lastDate !== today;
+  return streakIsAlive(s, today, todayLost) ? s.streak : 0;
 }
 
 function renderStreak() {
-  var s = loadStreak();
+  var n = currentStreak();
   var banner = document.getElementById('streak-banner');
   var val = document.getElementById('streak-val');
   var sub = document.getElementById('streak-sub');
   if (!banner) return;
-  if (s.streak > 0) {
+  if (n > 0) {
     banner.style.display = 'block';
-    val.textContent = s.streak;
-    sub.textContent = s.streak === 1 ? 'day' : 'days';
+    val.textContent = n;
+    sub.textContent = n === 1 ? 'day' : 'days';
   } else {
     banner.style.display = 'none';
   }
 }
 
-
+// Streak line under the score on the Daily results screen
+function renderDailyStreakLine() {
+  var el = document.getElementById('daily-streak-line');
+  if (!el) return;
+  var n = currentStreak();
+  if (n > 0) { el.textContent = '\ud83d\udd25 ' + n + ' day streak'; el.style.display = 'block'; }
+  else { el.style.display = 'none'; }
+}
 
 function showStreakAnimation(n) {
   var overlay = document.getElementById('streak-overlay');
@@ -3718,13 +3845,6 @@ function dateToSeed(dateStr) {
   return parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
 }
 
-function todayDateStr() {
-  var d = new Date();
-  return d.getFullYear() + '-' +
-    ('0' + (d.getMonth() + 1)).slice(-2) + '-' +
-    ('0' + d.getDate()).slice(-2);
-}
-
 // ── Daily challenge config ────────────────────────────────────────
 // Difficulty ramps Mon(1)=easy → Sun(7)=hardest
 // Friday = special mode (rotates weekly)
@@ -3808,9 +3928,52 @@ function generateDailyQuestions(cfg) {
     return eligible[Math.floor(rng.next() * eligible.length)];
   }
 
+  // Single-digit answers: build each question from its answer instead of retrying
+  // random operands, which almost never land on a one-digit result.
+  function oneDigitQuestion(op) {
+    var a, b, ans, text;
+    if (op === 'addition') {
+      // pick the answer, then split it so both operands stay in range
+      var minSum = cfg.addA[0] + cfg.addB[0];
+      ans = rng.randInt(minSum, 9);
+      a = rng.randInt(cfg.addA[0], Math.min(cfg.addA[1], ans - cfg.addB[0]));
+      b = ans - a;
+      text = a + ' + ' + b + ' =';
+    } else if (op === 'subtraction') {
+      // pick the answer, then a smaller number to build the larger one from
+      var lo = Math.min(cfg.addA[0], cfg.addB[0]), hi = Math.max(cfg.addA[1], cfg.addB[1]);
+      ans = rng.randInt(1, 9);
+      b = rng.randInt(lo, hi - ans);
+      a = b + ans;
+      text = a + ' - ' + b + ' =';
+    } else if (op === 'multiplication') {
+      // only a few products are 9 or less, so choose from those
+      var pairs = [];
+      for (var x = cfg.mulA[0]; x <= Math.min(cfg.mulA[1], 9); x++) {
+        for (var y = cfg.mulB[0]; y <= Math.min(cfg.mulB[1], 9); y++) {
+          if (x * y <= 9) pairs.push([x, y]);
+        }
+      }
+      var pick = pairs[Math.floor(rng.next() * pairs.length)];
+      a = pick[0]; b = pick[1]; ans = a * b;
+      text = a + ' x ' + b + ' =';
+    } else {
+      // division: the answer is b, so pick it first
+      a = rng.randInt(cfg.mulA[0], cfg.mulA[1]);
+      b = rng.randInt(cfg.mulB[0], Math.min(cfg.mulB[1], 9));
+      ans = b;
+      text = (a * b) + ' \u00f7 ' + a + ' =';
+    }
+    return { question: text, answer: ans, op: op, a: a, b: b };
+  }
+
   for (var i = 0; i < 600; i++) {
     var ops = cfg.ops;
     var op = ops[Math.floor(rng.next() * ops.length)];
+    if (cfg.specialMode && cfg.specialMode.oneDigit) {
+      questions.push(oneDigitQuestion(op));
+      continue;
+    }
     var a, b, q, ans;
     var attempts = 0;
 
@@ -3821,7 +3984,6 @@ function generateDailyQuestions(cfg) {
         b = rng.randInt(cfg.addB[0], cfg.addB[1]);
         if (cfg.specialMode && cfg.specialMode.primeOnly) { a = randPrimeVal(2, 97); b = randPrimeVal(2, 97); }
         ans = a + b;
-        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
         q = a + ' + ' + b + ' =';
       } else if (op === 'subtraction') {
         a = rng.randInt(cfg.addA[0], cfg.addA[1]);
@@ -3830,19 +3992,16 @@ function generateDailyQuestions(cfg) {
         var big = Math.max(a, b), sml = Math.min(a, b);
         if (big === sml) continue;
         ans = big - sml;
-        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
         q = big + ' - ' + sml + ' ='; a = big; b = sml;
       } else if (op === 'multiplication') {
         a = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, cfg.mulA[1]) : rng.randInt(cfg.mulA[0], cfg.mulA[1]);
         b = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, Math.min(cfg.mulB[1], 30)) : rng.randInt(cfg.mulB[0], cfg.mulB[1]);
         ans = a * b;
-        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
         q = a + ' x ' + b + ' =';
       } else {
         a = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, cfg.mulA[1]) : rng.randInt(cfg.mulA[0], cfg.mulA[1]);
         b = cfg.specialMode && cfg.specialMode.primeOnly ? randPrimeVal(2, Math.min(cfg.mulB[1], 30)) : rng.randInt(cfg.mulB[0], cfg.mulB[1]);
         ans = b;
-        if (cfg.specialMode && cfg.specialMode.oneDigit && ans > 9) continue;
         q = (a * b) + ' \u00f7 ' + a + ' =';
       }
       break;
@@ -3862,14 +4021,15 @@ var _dailyTimeLeft = 120;
 var _dailyTimerInterval = null;
 var _dailyAccepting = false;
 var _dailyCurrentAnswer = null;
-var _dailyCurrentOp = null;
-var _dailyCurrentA = null;
-var _dailyCurrentB = null;
 var _dailySkipTimeout = null;
 var _dailyDone = false;
+var _dailyInProgress = false;
+var _dailyEndTs = 0;        // wall-clock end time: backgrounding the tab can't stop the clock
+var _dailyDateStr = null;   // the date this attempt belongs to, locked when the game starts
+var DAILY_RESULT_NOTE = 'Come back tomorrow for a new challenge\n5+ correct counts towards your streak';
 
 function getDailyStorageKey() {
-  return 'mathlete_daily_' + todayDateStr();
+  return 'mathlete_daily_' + (_dailyDateStr || todayStr());
 }
 
 function getDailyResult() {
@@ -3877,13 +4037,16 @@ function getDailyResult() {
   catch(e) { return null; }
 }
 
-function saveDailyResult(score) {
-  try { localStorage.setItem(getDailyStorageKey(), JSON.stringify({ score: score, ts: Date.now() })); } catch(e) {}
+// done=false means the game was started but not finished. Older saves have no
+// 'done' field and were only ever written at the end, so they count as finished.
+function saveDailyResult(score, done) {
+  try { localStorage.setItem(getDailyStorageKey(), JSON.stringify({ score: score, ts: Date.now(), done: !!done })); } catch(e) {}
 }
 
 // ── Render info screen ────────────────────────────────────────────
 function initDailyChallenge() {
-  var dateStr = todayDateStr();
+  var dateStr = todayStr();
+  _dailyDateStr = dateStr;
   _dailyCfg = getDailyConfig(dateStr);
   _dailyQuestions = generateDailyQuestions(_dailyCfg);
   var cfg = _dailyCfg;
@@ -3940,11 +4103,17 @@ function initDailyChallenge() {
     document.getElementById('daily-game').style.display = 'none';
     document.getElementById('daily-results').style.display = 'flex';
     document.getElementById('daily-final-score').textContent = result.score;
-    document.getElementById('daily-final-sub').textContent = '';
-    document.getElementById('daily-rank-label').textContent = 'Come back tomorrow for a new challenge';
+    document.getElementById('daily-rank-label').textContent = DAILY_RESULT_NOTE;
     var shareBtn = document.getElementById('daily-share-btn');
     if (shareBtn) shareBtn.style.display = 'block';
-    loadDailyLeaderboard(false);
+    if (result.done === false) {
+      // Started but never finished (refresh / closed tab). That attempt is used
+      // up, so lock in the score it had reached.
+      commitDailyAttempt('abandoned');
+    } else {
+      loadDailyLeaderboard(false);
+    }
+    renderDailyStreakLine();
     return;
   }
 
@@ -3955,11 +4124,19 @@ function initDailyChallenge() {
 
 // ── Game ──────────────────────────────────────────────────────────
 function startDailyChallenge() {
+  _dailyDateStr = _dailyCfg ? _dailyCfg.dateStr : todayStr();
   _dailyQIdx = 0;
   _dailyScore = 0;
   _dailyTimeLeft = 120;
   _dailyAccepting = false;
   _dailyDone = false;
+  _dailyInProgress = true;
+  _dailyEndTs = Date.now() + 120000;
+  // Record the attempt straight away, so refreshing mid-game can't give a replay
+  saveDailyResult(0, false);
+  updateFirstTimeState();
+  document.documentElement.classList.add('playing');  // focus mode: hide the tabs, show Quit
+  gaEvent('daily_start', dailyEventParams());
 
   document.getElementById('daily-info').style.display = 'none';
   document.getElementById('daily-game').style.display = 'flex';
@@ -3974,25 +4151,37 @@ function startDailyChallenge() {
   document.getElementById('daily-timer-display').textContent = '2:00';
 
   nextDailyQuestion();
-
-  _dailyTimerInterval = setInterval(function() {
-    _dailyTimeLeft--;
-    var m = Math.floor(_dailyTimeLeft / 60);
-    var s = _dailyTimeLeft % 60;
-    document.getElementById('daily-timer-display').textContent = m + ':' + ('0' + s).slice(-2);
-    document.getElementById('daily-timer-bar').style.width = (_dailyTimeLeft / 120 * 100) + '%';
-    if (_dailyTimeLeft <= 0) endDailyChallenge();
-  }, 1000);
+  startDailyTimerInterval();
 }
+
+// The clock is derived from a wall-clock end time rather than counting ticks, so
+// switching apps or throttled background timers can't stop or slow it.
+function tickDailyTimer() {
+  if (!_dailyInProgress) return;
+  var left = Math.max(0, Math.ceil((_dailyEndTs - Date.now()) / 1000));
+  if (left !== _dailyTimeLeft) {
+    _dailyTimeLeft = left;
+    var m = Math.floor(left / 60);
+    var s = left % 60;
+    document.getElementById('daily-timer-display').textContent = m + ':' + ('0' + s).slice(-2);
+    document.getElementById('daily-timer-bar').style.width = (left / 120 * 100) + '%';
+  }
+  if (left <= 0) endDailyChallenge();
+}
+
+function startDailyTimerInterval() {
+  clearInterval(_dailyTimerInterval);
+  _dailyTimerInterval = setInterval(tickDailyTimer, 250);
+}
+
+// Coming back to the page re-checks the clock straight away
+document.addEventListener('visibilitychange', function() { if (!document.hidden) tickDailyTimer(); });
 
 function nextDailyQuestion() {
   hideDailySkip();
   if (!_dailyQuestions || _dailyQIdx >= _dailyQuestions.length) { endDailyChallenge(); return; }
   var q = _dailyQuestions[_dailyQIdx];
   _dailyCurrentAnswer = q.answer;
-  _dailyCurrentOp = q.op;
-  _dailyCurrentA = q.a;
-  _dailyCurrentB = q.b;
   document.getElementById('daily-question-display').textContent = q.question;
   document.getElementById('daily-answer-input').value = '';
   _dailyAccepting = true;
@@ -4025,6 +4214,7 @@ document.getElementById('daily-answer-input').addEventListener('keydown', functi
 
 document.getElementById('daily-answer-input').addEventListener('input', function() {
   if (!_dailyAccepting || !_dailyQuestions || !_dailyQuestions.length) return;
+  if (Date.now() >= _dailyEndTs) { endDailyChallenge(); return; }  // too late: time is up
   var val = this.value.trim();
   if (val === '' || val === '-') return;
   var typed = parseInt(val, 10);
@@ -4033,6 +4223,7 @@ document.getElementById('daily-answer-input').addEventListener('input', function
     hideDailySkip();
     _dailyAccepting = false;
     _dailyScore++;
+    saveDailyResult(_dailyScore, false);  // keep the stored score current
     _dailyQIdx++;
     document.getElementById('daily-score-display').textContent = _dailyScore;
     nextDailyQuestion();
@@ -4040,53 +4231,180 @@ document.getElementById('daily-answer-input').addEventListener('input', function
 });
 
 // ── End & results ─────────────────────────────────────────────────
-function endDailyChallenge() {
+// Parameters common to every Daily Challenge analytics event. friday_mode is the
+// special mode id on Fridays and 'none' on other days.
+function dailyEventParams(extra) {
+  var cfg = _dailyCfg || getDailyConfig(_dailyDateStr || todayStr());
+  var p = {
+    challenge_date: _dailyDateStr || cfg.dateStr,
+    day_of_week: cfg.dayName,
+    friday_mode: cfg.specialMode ? cfg.specialMode.id : 'none'
+  };
+  if (extra) { for (var k in extra) p[k] = extra[k]; }
+  return p;
+}
+
+function trackDailyShare() { gaEvent('daily_share', dailyEventParams()); }
+
+// Locks in an attempt: stores the final score, credits the streak (5+ correct)
+// and offers the score to the leaderboard. Used when a game ends, and when an
+// abandoned game is found on the next visit. `reason` is how the attempt ended:
+// 'time' (the clock ran out), 'quit' (the Quit dialog) or 'abandoned' (refresh / closed tab).
+function commitDailyAttempt(reason) {
+  saveDailyResult(_dailyScore, true);
+  updateFirstTimeState();
+  if (_dailyScore >= 5) {
+    var newStreak = updateStreak();
+    if (newStreak) _pendingStreakN = newStreak;  // animation plays once the submit dialog closes
+  }
+  // GA4 has no boolean type, so did_complete is sent as the text true / false
+  gaEvent('daily_complete', dailyEventParams({
+    score: _dailyScore,
+    streak: currentStreak(),
+    did_complete: reason === 'time' ? 'true' : 'false',
+    how_ended: reason
+  }));
+  loadDailyLeaderboard(true);
+}
+
+function endDailyChallenge(reason) {
   if (_dailyDone) return;
+  reason = reason || 'time';  // the clock running out is the normal way a game ends
   _dailyDone = true;
+  _dailyInProgress = false;
   clearInterval(_dailyTimerInterval);
   hideDailySkip();
   _dailyAccepting = false;
-
-  saveDailyResult(_dailyScore);
+  document.documentElement.classList.remove('playing');
+  document.getElementById('quit-confirm').style.display = 'none';
 
   document.getElementById('daily-game').style.display = 'none';
   document.getElementById('daily-results').style.display = 'flex';
   document.getElementById('daily-final-score').textContent = _dailyScore;
-  document.getElementById('daily-final-sub').textContent = '';
-  document.getElementById('daily-rank-label').textContent = '';
-  loadDailyLeaderboard(true);
+  document.getElementById('daily-rank-label').textContent = DAILY_RESULT_NOTE;
+  commitDailyAttempt(reason);
+  renderDailyStreakLine();
 }
 
-// ── Leaderboard (stub — wired to Supabase later) ──────────────────
-function loadDailyLeaderboard(submitScore) {
+// ── Daily leaderboard (Supabase daily_scores) ──────────────────
+function submitDailyScore(name, score, dateStr) {
+  return fetch(SUPA_URL + '/rest/v1/daily_scores', {
+    method: 'POST',
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': 'return=minimal'
+    },
+    body: JSON.stringify({ name: name, score: score, challenge_date: dateStr, device_id: getDeviceId() })
+  });
+}
+
+function showDailyNameModal(score, dateStr) {
+  _submitFn = function(name) { return submitDailyScore(name, score, dateStr); };
+  document.getElementById('modal-score').textContent = score;
+  document.getElementById('modal-sub').textContent = 'Daily Challenge · ' + (_dailyCfg ? _dailyCfg.dayName : '');
+  var uname = getUsername();
+  if (uname) { setUnameMode('existing'); document.getElementById('uname-display').textContent = uname; }
+  else { setUnameMode('create'); document.getElementById('handle-input').value = ''; updateUnamePreview(); }
+  document.getElementById('name-modal').style.display = 'flex';
+  if (!uname) setTimeout(function() { var h = document.getElementById('handle-input'); if (h) h.focus(); }, 50);
+}
+
+function renderDailyLbRows(rows) {
   var list = document.getElementById('daily-lb-list');
   var loading = document.getElementById('daily-lb-loading');
   var empty = document.getElementById('daily-lb-empty');
   list.innerHTML = '';
   loading.style.display = 'none';
+
+  if (!Array.isArray(rows) || !rows.length) {
+    empty.style.display = 'block';
+    empty.textContent = 'No scores yet today — be the first!';
+    return;
+  }
   empty.style.display = 'none';
 
-  // Supabase not set up yet — show placeholder
-  empty.style.display = 'block';
-  empty.textContent = 'Leaderboard coming soon — Supabase setup needed.';
+  rows = rows.slice().sort(function(a, b) { return b.score - a.score; }).slice(0, 20);
+  var myName = getUsername();
+  rows.forEach(function(row, i) {
+    var el = document.createElement('div'); el.className = 'lb-row';
+    var isYou = myName && row.name.toLowerCase() === myName.toLowerCase();
+    el.innerHTML =
+      '<div class="lb-rank' + (i < 3 ? ' top3' : '') + '">' + (i + 1) + '</div>' +
+      '<div class="lb-name' + (isYou ? ' you' : '') + '">' + escHtml(row.name) + (isYou ? ' (you)' : '') + '</div>' +
+      '<div class="lb-score">' + row.score + '</div>';
+    list.appendChild(el);
+  });
+}
+
+function loadDailyLeaderboard(shouldSubmit) {
+  var list = document.getElementById('daily-lb-list');
+  var loading = document.getElementById('daily-lb-loading');
+  var empty = document.getElementById('daily-lb-empty');
+  list.innerHTML = '';
+  loading.style.display = 'block';
+  empty.style.display = 'none';
+
+  var dateStr = _dailyDateStr || todayStr();
+
+  // Offer to submit the score first (name modal), on the results transition only
+  if (shouldSubmit && _dailyScore > 0) {
+    showDailyNameModal(_dailyScore, dateStr);
+  }
+
+  fetch(SUPA_URL + '/rest/v1/daily_scores?challenge_date=eq.' + dateStr + '&select=name,score&order=score.desc&limit=50', {
+    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Accept': 'application/json' }
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(rows) { renderDailyLbRows(rows); })
+  .catch(function() {
+    loading.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'Could not load leaderboard.';
+  });
 }
 
 // ── Share ─────────────────────────────────────────────────────────
-function shareDailyScore() {
-  var cfg = _dailyCfg || getDailyConfig(todayDateStr());
-  var opIcons = { addition: '+', subtraction: '\u2212', multiplication: '\u00d7', division: '\u00f7' };
-  var opsStr = cfg.ops.map(function(o) { return opIcons[o] || o; }).join(' ');
-  var text =
-    'Mathlete Daily \ud83d\uddd3\ufe0f\n' +
-    cfg.dayName + ' \u00b7 ' + cfg.diffLabel + '\n' +
+// Best Daily score over the 7 days before the attempt date (null if none).
+function dailyBestPrevWeek(dateStr) {
+  var best = null;
+  for (var i = 1; i <= 7; i++) {
+    try {
+      var raw = localStorage.getItem('mathlete_daily_' + shiftDateStr(dateStr, -i));
+      if (!raw) continue;
+      var r = JSON.parse(raw);
+      if (r && typeof r.score === 'number' && r.done !== false && (best === null || r.score > best)) best = r.score;
+    } catch (e) {}
+  }
+  return best;
+}
+
+function buildDailyShareText() {
+  var dateStr = _dailyDateStr || todayStr();
+  var cfg = _dailyCfg || getDailyConfig(dateStr);
+  var tag = cfg.specialMode ? cfg.specialMode.label : cfg.diffLabel;
+  var streak = currentStreak();
+  var best = dailyBestPrevWeek(dateStr);
+  var parts = [];
+  if (streak > 0) parts.push('\ud83d\udd25 ' + streak + ' day streak');
+  if (best !== null) {
+    parts.push(_dailyScore > best ? 'new best \ud83c\udf89' : 'best this week: ' + best);
+  }
+  return 'Mathlete Daily \u00b7 ' + cfg.dayName + ' \u00b7 ' + tag + '\n' +
     '\ud83c\udfaf ' + _dailyScore + ' correct in 2 min\n' +
-    opsStr + '\n' +
+    (parts.length ? parts.join(' \u00b7 ') + '\n' : '') +
     'nerdlegame.com/mathlete';
+}
+
+function shareDailyScore() {
+  var text = buildDailyShareText();
 
   if (navigator.share) {
-    navigator.share({ text: text }).catch(function() {});
+    navigator.share({ text: text }).then(trackDailyShare).catch(function() {});
   } else if (navigator.clipboard) {
     navigator.clipboard.writeText(text).then(function() {
+      trackDailyShare();
       var el = document.getElementById('daily-share-copied');
       if (el) { el.style.display = 'block'; setTimeout(function() { el.style.display = 'none'; }, 2500); }
     });
@@ -4094,10 +4412,14 @@ function shareDailyScore() {
     var ta = document.createElement('textarea');
     ta.value = text; document.body.appendChild(ta); ta.select();
     document.execCommand('copy'); document.body.removeChild(ta);
+    trackDailyShare();
     var el = document.getElementById('daily-share-copied');
     if (el) { el.style.display = 'block'; setTimeout(function() { el.style.display = 'none'; }, 2500); }
   }
 }
+
+
+
 
 
 // Expose to window for inline onclick handlers
@@ -4106,6 +4428,7 @@ window.quitGame = quitGame;
 window.startDailyChallenge = startDailyChallenge;
 window.skipDailyQuestion = skipDailyQuestion;
 window.shareDailyScore = shareDailyScore;
+window.buildDailyShareText = buildDailyShareText;
 window.askQuit = askQuit;
 window.keepPlaying = keepPlaying;
 window.skipQuestion = skipQuestion;
@@ -4143,7 +4466,9 @@ window.doSkip = doSkip;
 window.startLearnLevel = startLearnLevel;
 window.retryLearnLevel = retryLearnLevel;
 // Init daily on load (deferred so all functions are defined)
-if (document.getElementById('page-daily') && document.getElementById('page-daily').classList.contains('active')) { initDailyChallenge(); }
+// New visitors land on Play (with the welcome banner); returning players land on Daily.
+if (isFirstVisit()) { showPage('play'); }
+else if (document.getElementById('page-daily') && document.getElementById('page-daily').classList.contains('active')) { initDailyChallenge(); }
 })();
 });
 </script>
@@ -4171,10 +4496,10 @@ if (document.getElementById('page-daily') && document.getElementById('page-daily
 <!-- Quit confirm — clock pauses while open -->
 <div id="quit-confirm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:130;align-items:center;justify-content:center;padding:24px">
   <div style="background:var(--surface);border-radius:8px;max-width:300px;width:100%;padding:26px 22px;text-align:center">
-    <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:6px">Quit game?</div>
-    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:20px">Your score won't be saved.</div>
+    <div style="font-size:1rem;font-weight:700;color:var(--text);margin-bottom:6px" id="quit-confirm-title">Quit game?</div>
+    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:20px" id="quit-confirm-sub">Your score won't be saved.</div>
     <button onclick="keepPlaying()" style="width:100%;padding:13px;background:var(--accent);color:var(--accent-contrast);border:none;border-radius:6px;font-family:'Roboto Mono',monospace;font-size:0.78rem;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;margin-bottom:10px">Keep playing</button>
-    <button onclick="quitGame()" style="width:100%;padding:9px;background:none;border:none;color:var(--muted);font-family:'Roboto Mono',monospace;font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;cursor:pointer">Quit</button>
+    <button id="quit-confirm-quit" onclick="quitGame()" style="width:100%;padding:9px;background:none;border:none;color:var(--muted);font-family:'Roboto Mono',monospace;font-size:0.62rem;letter-spacing:2px;text-transform:uppercase;cursor:pointer">Quit</button>
   </div>
 </div>
 
@@ -4300,6 +4625,18 @@ if (document.getElementById('page-daily') && document.getElementById('page-daily
       <div id="daily-ops-display" style="display:flex;flex-direction:column;gap:6px"></div>
     </div>
 
+    <!-- Rules -->
+    <div id="daily-rules" style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:20px;">
+      <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px">How it works</div>
+      <ul class="rules-list">
+        <li>One attempt a day. Everyone gets the same questions.</li>
+        <li>Quit or refresh and your attempt ends.</li>
+        <li>Difficulty rises from Monday to Sunday. Friday is a special mode.</li>
+        <li>Score 5 or more to count towards your streak.</li>
+        <li>Your streak survives up to 2 missed days in any 7.</li>
+      </ul>
+    </div>
+
     <button class="start-btn" style="width:100%;margin-bottom:8px" id="daily-start-btn" onclick="startDailyChallenge()">Start challenge</button>
   </div>
 
@@ -4321,11 +4658,11 @@ if (document.getElementById('page-daily') && document.getElementById('page-daily
   <div id="daily-results" style="display:none;width:100%;flex-direction:column;align-items:center;">
     <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:6px">Today's result</div>
     <div style="font-size:clamp(3rem,14vw,5.5rem);font-weight:700;letter-spacing:-3px;line-height:1;margin-bottom:4px" id="daily-final-score">0</div>
-    <div style="font-size:0.7rem;color:#999;margin-bottom:20px" id="daily-final-sub"></div>
-    <div style="font-size:0.62rem;color:#999;margin-bottom:24px;text-align:center;width:100%" id="daily-rank-label"></div>
+    <div id="daily-streak-line" style="display:none;font-size:0.82rem;font-weight:700;color:var(--text);text-align:center;margin-top:8px"></div>
+    <div style="font-size:0.62rem;color:#999;margin-bottom:24px;text-align:center;width:100%;white-space:pre-line;line-height:1.7" id="daily-rank-label"></div>
     <!-- Leaderboard -->
     <div style="width:100%;margin-top:4px">
-      <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:8px;text-align:center">Today's leaderboard</div>
+      <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:8px;text-align:center">Daily Challenge Leaderboard</div>
       <div id="daily-lb-list" style="display:flex;flex-direction:column;gap:2px"></div>
       <div id="daily-lb-loading" style="font-size:0.65rem;color:#bbb;text-align:center;padding:20px 0">Loading...</div>
       <div id="daily-lb-empty" style="display:none;font-size:0.65rem;color:#bbb;text-align:center;padding:20px 0">No scores yet today.</div>
