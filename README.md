@@ -2,11 +2,16 @@
 
 **Daily mental-maths challenge by [nerdle](https://www.nerdlegame.com).** Every day
 there's a 2-minute Daily Challenge, the same for everyone, with its own leaderboard
-and streak. Alongside it, timed practice sprints track your progress over time, and
-a lightweight on-device skill model steers you toward your weak spots.
+and streak. Alongside it, practice games track your progress over time, and the Train
+tab uses a lightweight on-device skill model to drill your weak spots.
 
-> Working branch for the nerdle launch: **`mathlete`**.
-> Originally authored as *SpeedMaths*; being adapted into a nerdle brain-training game.
+Wording used in the game: **Daily** (the challenge), **Practice** (free practice
+games, page id `play`), **Train** (skill-model drills, page id `practice`). The page
+ids and GA `mode` values (`play`, `practice`) are unchanged, so analytics stay
+continuous.
+
+> Relaunched as a daily game on 31 Oct 2026. `main` and `mathlete` are in step; deploy
+> from `main`. Originally authored as *SpeedMaths* by Kiran Allen.
 
 ---
 
@@ -27,14 +32,16 @@ lives in the browser's `localStorage`.
 
 - **Daily** — the Daily Challenge (see [below](#daily-challenge)). The landing page
   and main game for everyone.
-- **Play** — practice mode, the alternative to the Daily: choose operations (+, −, ×, ÷) and number ranges, pick a duration
-  (30 s / 1 / 2 / 5 / 10 min), and answer as many as you can. A live **pace bar**
-  shows your speed vs your own average.
-- **Results** — score, accuracy, per-operation timing chart, and instant
-  "practice your mistakes" drills.
+- **Practice** (the `play` page) — practice games, the alternative to the Daily, under
+  a permanent "mathlete practice mode" heading: choose operations (+, −, ×, ÷) and
+  number ranges, pick a duration (30 s / 1 / 2 / 5 / 10 min), and answer as many as
+  you can. A live **pace bar** shows your speed vs your own average. "Or play today's
+  Daily Challenge" (or "See today's Daily result") under the button leads back.
+- **Results** — score, accuracy, per-operation timing chart, and an instant "Train on
+  mistakes" drill.
 - **History** — score / accuracy / avg-time trends (theme-aware canvas graphs),
   high scores per duration, and a full game log.
-- **Practise** — targeted drilling driven by the skill model: "practise weakest",
+- **Train** (the `practice` page) — targeted drilling driven by the skill model: "Weakest questions",
   auto-detected trouble patterns, and specialised sets (carrying, primes, large
   multiplications, …).
 - **Leaderboard** — global best scores by duration and time window (Supabase),
@@ -48,7 +55,8 @@ One 2-minute attempt a day. Everyone gets the same questions: 600 are generated 
 the date with a seeded random number generator (`generateDailyQuestions`), so no
 server is needed.
 
-**Rules shown to players** (the "How it works" panel on the Daily intro screen):
+**Rules shown to players** (under "How it works" on the Daily intro screen, collapsed
+until tapped):
 
 - One attempt a day. Everyone gets the same questions.
 - Quit or refresh and your attempt ends.
@@ -65,7 +73,7 @@ and single-digit answers. The three multiplication/division modes use times tabl
 up to 15 × 15 rather than the usual Friday ranges. See `getDailyConfig` and
 `DAILY_SPECIAL_MODES`.
 
-**Streak.** Only the Daily Challenge counts; Play and Learn don't. Each day with 5+
+**Streak.** Only the Daily Challenge counts; Practice and Learn don't. Each day with 5+
 correct adds 1. The streak survives up to 2 missed days in any 7 (a day played with
 fewer than 5 correct counts as missed), and days before a streak began can't count as
 missed, so a new streak is safe from day one. The displayed streak is recalculated
@@ -78,13 +86,30 @@ There's no pause: the clock runs off wall-clock time and the tabs are hidden dur
 the game. An unfinished attempt is settled on the next visit — today's when the
 Daily page opens, earlier days' on load — and reported as `how_ended: abandoned`.
 
-**Landing and links.** Everyone lands on the Daily. First-time visitors see a short
-welcome above it; "Or try practice mode" under the Start button, and "Try practice
-mode" on the results screen, lead to the Play tab. The share text links to
-`nerdlegame.com/mathlete/#daily`, which also switches an open Mathlete back to the Daily.
+**Landing and links.** Everyone lands on the Daily. First-time visitors see "One
+2-minute maths challenge a day" and a looping demo (questions typed and turning green,
+no Enter) above it. "Play Daily Challenge" is the first button on the page; "Or play a
+practice game" at the bottom of the intro, and "Play a practice game" on the results
+screen, lead to the Practice tab, whose button reads "Play practice game". Under that,
+"Or play today's Daily Challenge" (or "See today's Daily result" once played) leads
+back. The share text links to `nerdlegame.com/mathlete/#daily`, which also switches an
+open Mathlete back to the Daily.
 
 **Leaderboard.** Scores go to the Supabase `daily_scores` table through the same
-handle dialog as the main leaderboard. One attempt per device is enforced in the
+handle dialog as the main leaderboard. What's shown never includes a position or how
+many have played:
+- **10+ scores today:** the top 5, plus a row "RIC_q3zitz (you) · better than 27% of today's players"
+  (or your row highlighted if you're in the top 5).
+- **Fewer:** no table, just your score against "usual" past-day scores: the same
+  weekday if there are 20+ such scores in the last 4 weeks, else the last 7 days. With
+  too little Daily history, on Saturdays and Sundays (whose ranges match a default
+  2-minute practice game) it falls back to `PRACTICE_2MIN_CUTS`, the score percentiles
+  of 3,102 such practice games (3–30 Oct 2026). Below 10 today, the row reads "better
+  than 65% of recent players" (whichever baseline is used). Otherwise nothing.
+
+Percentiles count ties as half and use your score from this device, so they work
+whether or not you submitted. Thresholds: `DAILY_LB_MIN_TODAY`, `DAILY_LB_TOP`,
+`DAILY_LB_MIN_PAST`. One attempt per device is enforced in the
 browser only (local storage), not by the database.
 
 **Analytics events** (GA4, via `gaEvent`). `daily_start`, `daily_complete` and
@@ -97,7 +122,8 @@ or `none`):
 | `daily_complete` | `score`, `streak`, `did_complete` (`true` only if time ran out), `how_ended` (`time`, `quit` or `abandoned`) |
 | `daily_share` | — |
 | `daily_announce_view` / `daily_announce_dismiss` | — (the one-time "New: the Daily Challenge" card) |
-| `daily_to_practice` | `from` (`intro` or `results`): a practice-mode link on the Daily |
+| `daily_to_practice` | `from` (`intro` or `results`): a practice-game link on the Daily |
+| `practice_to_daily` | `played_today` (`true`/`false`): the Daily link on the Practice tab |
 
 **Launch announcement.** Players with Mathlete history from before the launch
 (`DAILY_LAUNCH_TS`, 31 Oct 2026) see a one-time card on the Daily page explaining the
@@ -209,7 +235,11 @@ device_id, session_id, user_id, username, client_ts, created_at   -- identifiers
 - `device_id` — persistent anonymous per-device UUID (groups a person's answers
   while logged out). **Note:** a browser tab and the installed PWA have separate
   `localStorage`, so one person can appear as two `device_id`s / handles until login.
-- `session_id` — fresh per game (groups a single sitting).
+- `session_id` — fresh per game (groups a single sitting). Daily Challenge games use
+  `daily-<YYYY-MM-DD>-<uuid>`, so `session_id LIKE 'daily-%'` separates Daily answers
+  (fixed questions, the same for everyone that day) from practice games. Daily answers
+  go to `question_log` and the skill model from 31 Oct 2026; before that they weren't
+  recorded.
 - `user_id` — nerdle account id; `null` until login is wired, then auto-filled.
 - `username` — the chosen leaderboard handle (`HANDLE_xxxxxx`); `null` until the
   player sets one. Only captured from the game *after* the handle exists, so a

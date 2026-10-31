@@ -16,9 +16,9 @@
 <link rel="icon" type="image/png" href="https://nerdlegame.com/logo192.png">
 <link rel="apple-touch-icon" href="https://nerdlegame.com/logo192.png">
 <meta name="theme-color" content="#820458">
-<meta name="description" content="Mathlete — a fast mental-maths trainer by nerdle. Timed arithmetic drills, targeted practice, and progress tracking.">
+<meta name="description" content="Mathlete by nerdle: one 2-minute maths challenge a day, the same for everyone. Plus practice games, targeted training and progress tracking.">
 <meta property="og:title" content="Mathlete — mental maths training by nerdle">
-<meta property="og:description" content="A fast mental-maths trainer by nerdle. Timed arithmetic drills, targeted practice, and progress tracking.">
+<meta property="og:description" content="One 2-minute maths challenge a day, the same for everyone. Plus practice games, targeted training and progress tracking.">
 <meta property="og:image" content="https://nerdlegame.com/logo192.png">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://nerdlegame.com/mathlete">
@@ -695,12 +695,23 @@ body { background: var(--bg); color: var(--text); }
   .key-del { font-size: 1.1rem; }
 }
 /* Daily Challenge rules list */
-.rules-list { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 0.62rem; line-height: 1.6; color: var(--muted); }
+.rules-list { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 0.88rem; line-height: 1.6; color: var(--muted); }
 .rules-list li { display: flex; gap: 8px; }
 .rules-list li::before { content: '\2022'; color: var(--faint); flex-shrink: 0; }
+/* No grey-on-grey on the Daily page: secondary text there uses the main text
+   colour (both themes), since grey on the grey page background was hard to read */
+#page-daily { --muted: var(--text); --faint: var(--text); }
+#page-daily .lb-row { font-size: 0.9rem; }
+#page-daily .lb-rank { font-size: 0.8rem; }
 /* Daily Challenge launch: what's-new card for existing players */
 :root.playing #daily-whatsnew { display: none !important; }
 .daily-practice-link { background: none; border: none; font-family: 'Roboto Mono', monospace; font-size: 0.6rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: 8px; text-decoration: underline; text-underline-offset: 3px; }
+.daily-practice-link { font-size: 0.78rem; }
+/* styled as a link (underlined, like "Or play a practice game") so it reads as tappable */
+.daily-rules summary { cursor: pointer; text-align: center; font-family: 'Roboto Mono', monospace; font-size: 0.78rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text); padding: 6px; list-style: none; text-decoration: underline; text-underline-offset: 3px; }
+.daily-rules summary::-webkit-details-marker { display: none; }
+.daily-rules summary::after { content: ' \25BE'; }
+.daily-rules[open] summary::after { content: ' \25B4'; }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -854,7 +865,7 @@ function showPage(name) {
     try { renderPracticeConfig(); } catch(e) { console.error('renderPracticeConfig failed:', e.message, e.stack); }
   }
   if (name === 'leaderboard') initLeaderboard();
-  if (name === 'play') { updateFirstTimeState(); }
+  if (name === 'play') { updateFirstTimeState(); renderPlayDailyLink(); }
   if (name === 'learn') { renderLearnMap(); }
   if (name === 'daily' && !_dailyInProgress) initDailyChallenge();
 }
@@ -1271,7 +1282,7 @@ function endGame() {
   var practiceBtn = document.getElementById('practice-last-btn');
   practiceBtn._pool = troublePool;
   practiceBtn.disabled = troublePool.length === 0;
-  practiceBtn.textContent = troublePool.length > 0 ? 'Practice mistakes (' + troublePool.length + ')' : 'No trouble!';
+  practiceBtn.textContent = troublePool.length > 0 ? 'Train on mistakes (' + troublePool.length + ')' : 'No trouble!';
 
   buildResultChart();
 }
@@ -1725,7 +1736,7 @@ function renderPatterns() {
   patterns.forEach(function(p) {
     var card = document.createElement('div'); card.className = 'pattern-card';
     var exChips = p.examples.map(function(ex) { return '<span class="pattern-ex-chip">' + ex.replace('=','').trim() + '</span>'; }).join('');
-    card.innerHTML = '<div class="pattern-card-header"><div class="pattern-card-title">' + p.title + '</div><div class="pattern-card-count">' + '' + '</div></div><div class="pattern-bar-wrap"><div class="pattern-bar-fill" style="width:' + Math.round(p.count/maxCount*100) + '%"></div></div><div class="pattern-card-detail">' + p.detail + '</div><div class="pattern-template">' + p.template + '</div><div class="pattern-examples">' + exChips + '</div><button class="pattern-practice-btn">Practice this pattern</button>';
+    card.innerHTML = '<div class="pattern-card-header"><div class="pattern-card-title">' + p.title + '</div><div class="pattern-card-count">' + '' + '</div></div><div class="pattern-bar-wrap"><div class="pattern-bar-fill" style="width:' + Math.round(p.count/maxCount*100) + '%"></div></div><div class="pattern-card-detail">' + p.detail + '</div><div class="pattern-template">' + p.template + '</div><div class="pattern-examples">' + exChips + '</div><button class="pattern-practice-btn">Train this pattern</button>';
     card.querySelector('.pattern-practice-btn').addEventListener('click', function() { practicePattern(p.id); });
     list.appendChild(card);
   });
@@ -3198,19 +3209,18 @@ function isFirstVisit() {
 }
 
 function updateFirstTimeState() {
-  // A Daily attempt counts as a game for unlocking Results, History and Practise
+  // A Daily attempt counts as a game for unlocking Results, History and Train
   var generalGames = loadData().games.length;
   var played = generalGames + dailyPlayCount();
   var hasGames = played > 0;
   var hasTwoGames = played >= 2;
 
-  // Welcome banner: show until first game played
+  // "mathlete practice mode" heading on the Practice tab: always shown (hidden
+  // during a game by the :root.playing rule)
   var banner = document.getElementById('welcome-banner');
-  var dismissed = false;
-  try { dismissed = localStorage.getItem('arith_welcome_dismissed') === '1'; } catch(e) {}
-  if (banner) banner.style.display = dismissed ? 'none' : 'block';
+  if (banner) banner.style.display = 'block';
 
-  // Lock Results/History/Practise tabs until games played
+  // Lock Results/History/Train tabs until games played
   var resultsBtn = document.querySelector('.nav-btn[data-page="results"]');
   var historyBtn = document.querySelector('.nav-btn[data-page="history"]');
   var practiseBtn = document.querySelector('.nav-btn[data-page="practice"]');
@@ -3784,7 +3794,7 @@ function renderSpecialisedCards() {
       card.innerHTML =
         '<div class="pattern-card-header"><div class="pattern-card-title">' + spec.title + '</div></div>' +
         '<div class="pattern-card-detail">' + spec.detail + '</div>' +
-        '<button class="pattern-practice-btn">Practice now</button>';
+        '<button class="pattern-practice-btn">Train now</button>';
       card.querySelector('.pattern-practice-btn').addEventListener('click', function() {
         startSpecialisedPractice(spec.id);
       });
@@ -3916,7 +3926,6 @@ function getDailyConfig(dateStr) {
     dayName:    dayNames[dayNum],
     difficulty: difficulty,
     diffLabel:  diffLabels[difficulty],
-    diffPct:    Math.round(10 + (difficulty - 1) / 6 * 90),
     ops:        ops,
     addA:       [2, addMax],
     addB:       [2, addMax],
@@ -4037,7 +4046,9 @@ var _dailyCurrentAnswer = null;
 var _dailySkipTimeout = null;
 var _dailyDone = false;
 var _dailyInProgress = false;
-var _dailyEndTs = 0;        // wall-clock end time: backgrounding the tab can't stop the clock
+var _dailyQStart = 0;        // performance.now() when the current question appeared
+var _dailyQHadTrouble = false;  // a backspace/skip already logged for this question
+var _dailyEndTs = 0;       // wall-clock end time: backgrounding the tab can't stop the clock
 var _dailyDateStr = null;   // the date this attempt belongs to, locked when the game starts
 // Opens straight onto the Daily Challenge, even for a first-time visitor. Used by
 // the share text and by links from other nerdle games.
@@ -4094,7 +4105,19 @@ function dismissDailyWhatsNew() {
   gaEvent('daily_announce_dismiss', {});
 }
 
-// Practice mode (the Play tab) is the alternative route from the Daily.
+// The way back from practice: "Or play today's Daily Challenge", or once today's
+// attempt is made, "See today's Daily result".
+function renderPlayDailyLink() {
+  var link = document.getElementById('play-daily-link');
+  if (link) link.textContent = dailyAttemptedToday() ? "See today's Daily result" : "Or play today's Daily Challenge";
+}
+
+function openDailyFromPractice() {
+  gaEvent('practice_to_daily', { played_today: dailyAttemptedToday() ? 'true' : 'false' });
+  showPage('daily');
+}
+
+// Practice games (the Practice tab, page id "play") are the alternative route from the Daily.
 // `from` is 'intro' or 'results'.
 function openPracticeFromDaily(from) {
   gaEvent('daily_to_practice', { from: from });
@@ -4111,48 +4134,62 @@ function initDailyChallenge() {
   _dailyQuestions = generateDailyQuestions(_dailyCfg);
   var cfg = _dailyCfg;
 
-  // Date label
-  var d = new Date(dateStr + 'T12:00:00');
-  var dateLabel = d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' });
-  document.getElementById('daily-date-label').textContent = dateLabel;
 
   // Title — special Friday
-  var titleEl = document.getElementById('daily-title');
+  // Line under the Play button: only on Fridays, to name the special mode
   var subEl = document.getElementById('daily-sub');
   if (cfg.isFriday && cfg.specialMode) {
-    titleEl.textContent = 'Special Friday';
-    subEl.textContent = cfg.specialMode.label + ' · 2 minutes';
+    subEl.textContent = 'Special Friday: ' + cfg.specialMode.label;
+    subEl.style.display = 'block';
   } else {
-    titleEl.textContent = 'Daily Challenge';
-    subEl.textContent = '2 minutes · same for everyone';
+    subEl.style.display = 'none';
   }
 
   // Difficulty bar
-  document.getElementById('daily-difficulty-fill').style.width = cfg.diffPct + '%';
-  document.getElementById('daily-day-label').textContent = cfg.dayName + ' — ' + cfg.diffLabel;
+  // Seven segments, M T W T F S S: filled black up to and including today
+  var daysEl = document.getElementById('daily-difficulty-days');
+  daysEl.innerHTML = '';
+  daysEl.setAttribute('aria-label', 'Difficulty ' + cfg.dayNum + ' of 7');
+  ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(function(letter, i) {
+    var day = i + 1;
+    var seg = document.createElement('div');
+    seg.style.cssText = 'flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;';
+    var bar = document.createElement('div');
+    bar.style.cssText = 'width:100%;height:8px;border-radius:2px;background:' + (day <= cfg.dayNum ? 'var(--text)' : 'var(--border)') + ';';
+    var lbl = document.createElement('div');
+    lbl.textContent = letter;
+    lbl.style.cssText = 'font-size:0.75rem;line-height:1;color:var(--text);' + (day === cfg.dayNum ? 'font-weight:700;' : '');
+    seg.appendChild(bar); seg.appendChild(lbl);
+    daysEl.appendChild(seg);
+  });
+  // The bar below shows how hard it is, so the label just names the day
+  document.getElementById('daily-day-label').textContent = "Today's " + cfg.dayName + ' game';
 
   // Ops display
   var opsEl = document.getElementById('daily-ops-display');
   opsEl.innerHTML = '';
+  // All four operations on one line, each with a tick (in today's game) or a
+  // cross (not). Friday's mode (primes, single-digit\u2026) is named under the Play button.
   var opDetails = {
     addition:       { sym: '+', label: 'Addition' },
     subtraction:    { sym: '\u2212', label: 'Subtraction' },
     multiplication: { sym: '\u00d7', label: 'Multiplication' },
     division:       { sym: '\u00f7', label: 'Division' }
   };
-  cfg.ops.forEach(function(op) {
-    var row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;';
+  ['addition', 'subtraction', 'multiplication', 'division'].forEach(function(op) {
+    var on = cfg.ops.indexOf(op) !== -1;
+    var col = document.createElement('span');
+    col.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:6px;';
+    col.setAttribute('aria-label', opDetails[op].label + (on ? ': in today\u2019s game' : ': not today'));
     var sym = document.createElement('span');
-    sym.style.cssText = 'font-size:1rem;font-weight:700;width:20px;text-align:center;flex-shrink:0;';
     sym.textContent = opDetails[op].sym;
-    var lbl = document.createElement('span');
-    lbl.style.cssText = 'font-size:0.62rem;color:#888;';
-    lbl.textContent = opDetails[op].label;
-    if (cfg.specialMode && cfg.specialMode.primeOnly) lbl.textContent += ' (prime numbers only)';
-    if (cfg.specialMode && cfg.specialMode.oneDigit) lbl.textContent += ' (single-digit answers)';
-    row.appendChild(sym); row.appendChild(lbl);
-    opsEl.appendChild(row);
+    if (!on) sym.style.opacity = '0.3';
+    var mark = document.createElement('span');
+    mark.textContent = on ? '\u2713' : '\u2717';
+    // nerdle green tick / nerdle purple cross
+    mark.style.cssText = 'font-size:1.1rem;color:' + (on ? 'var(--green)' : 'var(--accent)') + ';';
+    col.appendChild(sym); col.appendChild(mark);
+    opsEl.appendChild(col);
   });
 
   // Check if already played today — if so, jump straight to results
@@ -4192,6 +4229,8 @@ function startDailyChallenge() {
   _dailyDone = false;
   _dailyInProgress = true;
   _dailyEndTs = Date.now() + 120000;
+  // question_log session id: 'daily-<date>-…' so Daily answers can be told apart
+  currentSessionId = 'daily-' + _dailyDateStr + '-' + newId('ses');
   // Record the attempt straight away, so refreshing mid-game can't give a replay
   saveDailyResult(0, false);
   updateFirstTimeState();
@@ -4242,6 +4281,8 @@ function nextDailyQuestion() {
   if (!_dailyQuestions || _dailyQIdx >= _dailyQuestions.length) { endDailyChallenge(); return; }
   var q = _dailyQuestions[_dailyQIdx];
   _dailyCurrentAnswer = q.answer;
+  _dailyQStart = performance.now();
+  _dailyQHadTrouble = false;
   document.getElementById('daily-question-display').textContent = q.question;
   document.getElementById('daily-answer-input').value = '';
   _dailyAccepting = true;
@@ -4255,8 +4296,20 @@ function hideDailySkip() {
   clearTimeout(_dailySkipTimeout);
 }
 
+// Record an answer to the skill model and question_log, as practice games do:
+// correct=true on a right answer, false on the first backspace or a skip.
+function recordDailyAnswer(correct) {
+  var q = _dailyQuestions[_dailyQIdx];
+  if (!q) return;
+  var elapsed = performance.now() - _dailyQStart;
+  var pos = Math.max(0, 1 - _dailyTimeLeft / 120);
+  updateSkills(q.op, q.a, q.b, elapsed, correct, pos, _dailyTimeLeft, 120);
+  logQuestion(q.op, q.a, q.b, correct, elapsed, pos, _dailyTimeLeft, 120);
+}
+
 function skipDailyQuestion() {
   if (!_dailyAccepting) return;
+  if (!_dailyQHadTrouble) { _dailyQHadTrouble = true; recordDailyAnswer(false); }
   hideDailySkip();
   _dailyAccepting = false;
   _dailyQIdx++;
@@ -4266,6 +4319,7 @@ function skipDailyQuestion() {
 document.getElementById('daily-answer-input').addEventListener('keydown', function(e) {
   if (!_dailyAccepting) return;
   if (e.key === 'Backspace') {
+    if (!_dailyQHadTrouble) { _dailyQHadTrouble = true; recordDailyAnswer(false); }
     hideDailySkip();
     clearTimeout(_dailySkipTimeout);
     _dailySkipTimeout = setTimeout(showDailySkip, 5000);
@@ -4282,6 +4336,7 @@ document.getElementById('daily-answer-input').addEventListener('input', function
   if (typed === _dailyCurrentAnswer) {
     hideDailySkip();
     _dailyAccepting = false;
+    recordDailyAnswer(true);
     _dailyScore++;
     saveDailyResult(_dailyScore, false);  // keep the stored score current
     _dailyQIdx++;
@@ -4405,31 +4460,111 @@ function showDailyNameModal(score, dateStr) {
   if (!uname) setTimeout(function() { var h = document.getElementById('handle-input'); if (h) h.focus(); }, 50);
 }
 
-function renderDailyLbRows(rows) {
-  var list = document.getElementById('daily-lb-list');
-  var loading = document.getElementById('daily-lb-loading');
-  var empty = document.getElementById('daily-lb-empty');
-  list.innerHTML = '';
-  loading.style.display = 'none';
+// Daily leaderboard rules (never shows a position or how many have played):
+//  - 10+ scores today: the top 5, plus "you" with your percentile among today's players.
+//  - Fewer: no table; just your percentile against past days' scores ("usual" Daily
+//    scores) — the same weekday if there are 20+ such scores, else the last 7 days,
+//    else nothing.
+var DAILY_LB_MIN_TODAY = 10;   // scores today before the table is shown
+var DAILY_LB_TOP = 5;          // rows in the table
+var DAILY_LB_MIN_PAST = 20;    // past scores needed for a meaningful percentile
 
-  if (!Array.isArray(rows) || !rows.length) {
-    empty.style.display = 'block';
-    empty.textContent = 'No scores yet today — be the first!';
+// Cold-start baseline, used only until there are DAILY_LB_MIN_PAST real Daily scores:
+// scores of default 2-minute practice games with all four operations (3,102 games,
+// 784 players, 3–30 Oct 2026, GA4 game_complete via BigQuery), at 5%, 10% … 95%.
+// Those games use exactly the Saturday/Sunday Daily ranges, so it's only applied on
+// days whose config matches (see dailyMatchesPracticeDefaults).
+var PRACTICE_2MIN_CUTS = [6, 8, 10, 12, 13, 15, 17, 18, 20, 21, 22, 24, 25, 27, 29, 31, 34, 37, 47];
+
+function dailyMatchesPracticeDefaults(cfg) {
+  return !cfg.specialMode && cfg.ops.length === 4 &&
+    cfg.addA[1] === 100 && cfg.mulA[1] === 12 && cfg.mulB[1] === 100;
+}
+
+// Percentile of `score` from 5%-step cut points, interpolated, capped at 1–99.
+function percentileFromCuts(score, cuts) {
+  var p;
+  if (score < cuts[0]) p = 5 * score / cuts[0];
+  else if (score >= cuts[cuts.length - 1]) p = 97;
+  else {
+    var i = 0;
+    while (i < cuts.length - 1 && score >= cuts[i + 1]) i++;
+    var span = cuts[i + 1] - cuts[i];
+    p = (i + 1) * 5 + (span ? 5 * (score - cuts[i]) / span : 0);
+  }
+  return Math.max(1, Math.min(99, Math.round(p)));
+}
+
+function lbHeaders() { return { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Accept': 'application/json' }; }
+
+// Share of `scores` below `mine`, ties counting half, as a whole percentage.
+function percentileOf(mine, scores) {
+  var below = 0, equal = 0;
+  scores.forEach(function(s) { if (s < mine) below++; else if (s === mine) equal++; });
+  return Math.round((below + equal / 2) / scores.length * 100);
+}
+
+function isMyRow(row) {
+  var me = getUsername();
+  return !!(me && row.name && row.name.toLowerCase() === me.toLowerCase());
+}
+
+// Your row, laid out like a leaderboard row: "RIC_q3zitz (you)  better than 65% of
+// today's players" — the comparison sits where the score would be. `of` is
+// "today's players" or "recent players".
+function dailyYouLine(pct, of) {
+  var me = getUsername();
+  var el = document.createElement('div');
+  el.className = 'lb-row';
+  el.innerHTML =
+    '<div class="lb-rank"></div>' +
+    '<div class="lb-name you">' + (me ? escHtml(me) + ' (you)' : 'You') + '</div>' +
+    '<div style="flex-shrink:0;text-align:right;font-weight:700;line-height:1.3">better than ' + pct + '%<br>of ' + of + '</div>';
+  return el;
+}
+
+function renderDailyLeaderboard(today, past, dateStr) {
+  var list = document.getElementById('daily-lb-list');
+  var heading = document.getElementById('daily-lb-heading');
+  document.getElementById('daily-lb-loading').style.display = 'none';
+  list.innerHTML = '';
+  var mine = _dailyScore;
+
+  if (today.length >= DAILY_LB_MIN_TODAY) {
+    heading.style.display = 'block';
+    var others = today.filter(function(r) { return !isMyRow(r); }).map(function(r) { return r.score; });
+    var pct = percentileOf(mine, others.length ? others : [mine]);
+    var youInTop = false;
+    today.slice(0, DAILY_LB_TOP).forEach(function(row, i) {
+      var isYou = isMyRow(row);
+      if (isYou) youInTop = true;
+      var el = document.createElement('div'); el.className = 'lb-row';
+      el.innerHTML =
+        '<div class="lb-rank top3">' + (i + 1) + '</div>' +
+        '<div class="lb-name' + (isYou ? ' you' : '') + '">' + escHtml(row.name) + (isYou ? ' (you)' : '') + '</div>' +
+        '<div class="lb-score">' + row.score + '</div>';
+      list.appendChild(el);
+    });
+    if (!youInTop && mine > 0) {
+      list.appendChild(dailyYouLine(pct, 'today’s players'));
+    }
     return;
   }
-  empty.style.display = 'none';
 
-  rows = rows.slice().sort(function(a, b) { return b.score - a.score; }).slice(0, 20);
-  var myName = getUsername();
-  rows.forEach(function(row, i) {
-    var el = document.createElement('div'); el.className = 'lb-row';
-    var isYou = myName && row.name.toLowerCase() === myName.toLowerCase();
-    el.innerHTML =
-      '<div class="lb-rank' + (i < 3 ? ' top3' : '') + '">' + (i + 1) + '</div>' +
-      '<div class="lb-name' + (isYou ? ' you' : '') + '">' + escHtml(row.name) + (isYou ? ' (you)' : '') + '</div>' +
-      '<div class="lb-score">' + row.score + '</div>';
-    list.appendChild(el);
-  });
+  // Too few today: no table, just how your score compares with past days
+  heading.style.display = 'none';
+  var dayName = getDailyConfig(dateStr).dayName;
+  var sameDay = past.filter(function(r) { return getDailyConfig(r.challenge_date).dayName === dayName; });
+  var weekAgo = shiftDateStr(dateStr, -7);
+  var lastWeek = past.filter(function(r) { return r.challenge_date >= weekAgo; });
+  var base = sameDay.length >= DAILY_LB_MIN_PAST ? sameDay
+           : lastWeek.length >= DAILY_LB_MIN_PAST ? lastWeek : null;
+  if (mine > 0 && base) {
+    list.appendChild(dailyYouLine(percentileOf(mine, base.map(function(r) { return r.score; })), 'recent players'));
+  } else if (mine > 0 && dailyMatchesPracticeDefaults(getDailyConfig(dateStr))) {
+    // Not enough Daily history yet: compare with the matching practice games
+    list.appendChild(dailyYouLine(percentileFromCuts(mine, PRACTICE_2MIN_CUTS), 'recent players'));
+  }
 }
 
 function loadDailyLeaderboard(shouldSubmit) {
@@ -4439,6 +4574,7 @@ function loadDailyLeaderboard(shouldSubmit) {
   list.innerHTML = '';
   loading.style.display = 'block';
   empty.style.display = 'none';
+  document.getElementById('daily-lb-heading').style.display = 'none';
 
   var dateStr = _dailyDateStr || todayStr();
 
@@ -4447,11 +4583,17 @@ function loadDailyLeaderboard(shouldSubmit) {
     showDailyNameModal(_dailyScore, dateStr);
   }
 
-  fetch(SUPA_URL + '/rest/v1/daily_scores?challenge_date=eq.' + dateStr + '&select=name,score&order=score.desc&limit=50', {
-    headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY, 'Accept': 'application/json' }
+  // Today's scores (all of them, for the percentile) and the past 4 weeks
+  var base = SUPA_URL + '/rest/v1/daily_scores?';
+  var todayReq = fetch(base + 'challenge_date=eq.' + dateStr + '&select=name,score&order=score.desc&limit=1000', { headers: lbHeaders() })
+    .then(function(r) { return r.json(); });
+  var pastReq = fetch(base + 'challenge_date=gte.' + shiftDateStr(dateStr, -28) + '&challenge_date=lt.' + dateStr +
+      '&select=score,challenge_date&order=challenge_date.desc&limit=1000', { headers: lbHeaders() })
+    .then(function(r) { return r.json(); });
+  Promise.all([todayReq, pastReq])
+  .then(function(res) {
+    renderDailyLeaderboard(Array.isArray(res[0]) ? res[0] : [], Array.isArray(res[1]) ? res[1] : [], dateStr);
   })
-  .then(function(r) { return r.json(); })
-  .then(function(rows) { renderDailyLbRows(rows); })
   .catch(function() {
     loading.style.display = 'none';
     empty.style.display = 'block';
@@ -4524,6 +4666,7 @@ window.skipDailyQuestion = skipDailyQuestion;
 window.shareDailyScore = shareDailyScore;
 window.dismissDailyWhatsNew = dismissDailyWhatsNew;
 window.openPracticeFromDaily = openPracticeFromDaily;
+window.openDailyFromPractice = openDailyFromPractice;
 window.buildDailyShareText = buildDailyShareText;
 window.askQuit = askQuit;
 window.keepPlaying = keepPlaying;
@@ -4563,7 +4706,7 @@ window.startLearnLevel = startLearnLevel;
 window.retryLearnLevel = retryLearnLevel;
 // Init daily on load (deferred so all functions are defined)
 settleStaleDailyAttempts();
-// Everyone lands on the Daily Challenge; practice mode is the Play tab.
+// Everyone lands on the Daily Challenge; practice games are on the Practice (play) tab.
 showPage('daily');
 // #daily links (already in shared results) also switch back to the Daily if Mathlete is open
 function wantsDaily() { return /^#daily$/i.test(location.hash || ''); }
@@ -4604,32 +4747,25 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
 
 <nav class="nav">
   <button class="nav-btn active" data-page="daily">Daily</button>
-  <button class="nav-btn" data-page="play">Play</button>
+  <button class="nav-btn" data-page="play">Practice</button>
   <button class="nav-btn" data-page="results">Results</button>
   <button class="nav-btn" data-page="history">History</button>
-  <button class="nav-btn" data-page="practice">Practise</button>
+  <button class="nav-btn" data-page="practice">Train</button>
   <button class="nav-btn" data-page="leaderboard">Leaderboard</button>
   <button class="nav-btn" data-page="learn">Learn</button>
 </nav>
 
 <!-- PLAY -->
 <div class="page" id="page-play">
-  <!-- Intro box — persists above config + game; only the illustration hides during play -->
+  <!-- "mathlete practice mode" heading: always shown on this tab, hidden during a game -->
   <div id="welcome-banner" style="display:none;width:100%;background:var(--surface);border:1px solid var(--border);padding:12px 16px;margin-bottom:10px;position:relative">
-    <button onclick="dismissWelcome()" style="position:absolute;top:8px;right:12px;background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--faint);line-height:1;padding:0" title="Dismiss">&times;</button>
-    <div id="welcome-title" style="margin-bottom:8px;text-align:center;color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
-    <div class="intro-demo" id="intro-demo" aria-hidden="true">
-      <div class="demo-intro" id="demo-intro">Speed training for your number brain</div>
-      <div class="demo-play" id="demo-play" style="display:none">
-        <div class="demo-q" id="demo-q">7 &times; 8 =</div>
-        <div class="demo-a" id="demo-a"><span id="demo-typed"></span><span class="demo-caret"></span></div>
-      </div>
-    </div>
-    <div style="font-size:0.64rem;color:var(--text);line-height:1.5;text-align:center;margin-top:10px;white-space:nowrap">Type your answer — auto-submits when correct.</div>
+    <div id="welcome-title" style="text-align:center;color:var(--text);font-size:0.92rem;font-family:'Roboto Mono',monospace"><span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span></span> practice mode</div>
   </div>
 
   <div id="config-screen" style="width:100%">
-    <button class="start-btn" onclick="startGame()" style="margin-bottom:26px">Start</button>
+    <button class="start-btn" onclick="startGame()" style="margin-bottom:6px">Play practice game</button>
+    <!-- the way back to the Daily; text set by renderPlayDailyLink() -->
+    <button class="daily-practice-link" id="play-daily-link" onclick="openDailyFromPractice()" style="display:block;margin:0 auto 18px;color:var(--text)">Or play today's Daily Challenge</button>
     <div class="section-head">
       <div class="section-label">Operations</div>
       <div class="field-hint">Select operations to include</div>
@@ -4701,12 +4837,12 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
 
   <!-- What's new: shown once to players who used Mathlete before the Daily launched -->
   <div id="daily-whatsnew" style="display:none;width:100%;background:var(--surface);border:1px solid var(--accent);padding:14px 18px;margin-bottom:16px;">
-    <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:4px">New</div>
-    <div style="font-size:0.95rem;font-weight:700;color:var(--text);margin-bottom:10px">The Daily Challenge</div>
+    <div style="font-size:0.72rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:4px">New</div>
+    <div style="font-size:1.15rem;font-weight:700;color:var(--text);margin-bottom:10px">The Daily Challenge</div>
     <ul class="rules-list">
       <li>One 2-minute game a day, the same questions for everyone, with its own leaderboard.</li>
       <li id="daily-whatsnew-streak"></li>
-      <li>Play, Practise, Learn and the all-time Leaderboard are still in the tabs.</li>
+      <li>Practice, Train, Learn and the all-time Leaderboard are still in the tabs.</li>
     </ul>
     <button class="btn-outline" onclick="dismissDailyWhatsNew()" style="width:100%;margin-top:12px">Got it</button>
   </div>
@@ -4714,47 +4850,46 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
   <!-- Pre-game info screen -->
   <div id="daily-info" style="width:100%;display:flex;flex-direction:column;align-items:center;">
     <!-- First visit only -->
-    <div id="daily-welcome" style="display:none;width:100%;text-align:center;margin-bottom:18px">
-      <div style="color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace;margin-bottom:6px">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
-      <div style="font-size:0.64rem;color:var(--text);line-height:1.5">One 2-minute maths challenge a day. Type your answer and it submits itself when it's correct.</div>
-    </div>
-    <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:6px" id="daily-date-label"></div>
-    <div style="font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:4px" id="daily-title">Daily Challenge</div>
-    <div style="font-size:0.65rem;color:#999;margin-bottom:20px" id="daily-sub">2 minutes · same for everyone</div>
-
-    <!-- Difficulty bar -->
-    <div style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:16px;">
-      <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px">Today's difficulty</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <div style="font-size:0.6rem;color:#999;width:28px;flex-shrink:0">Easy</div>
-        <div style="flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div id="daily-difficulty-fill" style="height:100%;border-radius:3px;background:var(--text);transition:width 0.6s ease;width:0%"></div>
+    <div id="daily-welcome" style="display:none;width:100%;text-align:center;margin-bottom:16px">
+      <div style="font-size:1rem;font-weight:700;color:var(--text);line-height:1.4;margin-bottom:10px">One 2-minute maths challenge a day</div>
+      <!-- Looping demo: a tagline, then questions typed and turning green (no Enter) -->
+      <div class="intro-demo" id="intro-demo" aria-hidden="true">
+        <div class="demo-intro" id="demo-intro">Just type the answer – no Enter needed</div>
+        <div class="demo-play" id="demo-play" style="display:none">
+          <div class="demo-q" id="demo-q">7 &times; 8 =</div>
+          <div class="demo-a" id="demo-a"><span id="demo-typed"></span><span class="demo-caret"></span></div>
         </div>
-        <div style="font-size:0.6rem;color:#999;width:28px;flex-shrink:0;text-align:right">Hard</div>
       </div>
-      <div style="font-size:0.62rem;font-weight:700;color:var(--text);margin-top:8px;text-align:center" id="daily-day-label"></div>
+    </div>
+    <button class="start-btn" style="width:100%;margin-bottom:18px" id="daily-start-btn" onclick="startDailyChallenge()">Play Daily Challenge</button>
+    <!-- Fridays only: names the special mode -->
+    <div style="display:none;font-size:0.9rem;color:var(--muted);margin:-8px 0 18px;text-align:center" id="daily-sub"></div>
+
+    <!-- Today: difficulty + operations -->
+    <div style="width:100%;background:var(--surface);border:1px solid var(--border);padding:16px 18px;margin-bottom:18px;">
+      <div style="font-size:0.95rem;font-weight:700;color:var(--text);margin-bottom:10px;text-align:center" id="daily-day-label"></div>
+      <!-- Difficulty: one segment per day, Mon (easiest) to Sun (hardest); filled up to today -->
+      <div style="display:flex;align-items:flex-start;gap:10px">
+        <div style="font-size:0.78rem;color:var(--muted);flex-shrink:0;margin-top:-5px">Easy</div>
+        <div id="daily-difficulty-days" style="flex:1;display:flex;gap:4px"></div>
+        <div style="font-size:0.78rem;color:var(--muted);flex-shrink:0;margin-top:-5px">Hard</div>
+      </div>
+      <div id="daily-ops-display" aria-label="Today's operations" style="display:flex;justify-content:center;gap:28px;margin-top:14px;font-size:2.2rem;font-weight:700;line-height:1;color:var(--text)"></div>
     </div>
 
-    <!-- Operations/mode -->
-    <div style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:20px;">
-      <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px">Today's operations</div>
-      <div id="daily-ops-display" style="display:flex;flex-direction:column;gap:6px"></div>
-    </div>
-
-    <!-- Rules -->
-    <div id="daily-rules" style="width:100%;background:var(--surface);border:1px solid var(--border);padding:14px 18px;margin-bottom:20px;">
-      <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:10px">How it works</div>
-      <ul class="rules-list">
+    <!-- Rules, collapsed: tap "How it works" to expand -->
+    <details id="daily-rules" class="daily-rules" style="width:100%;margin:0 0 18px">
+      <summary>How it works</summary>
+      <ul class="rules-list" style="margin:10px 0 0;padding:0 4px">
         <li>One attempt a day. Everyone gets the same questions.</li>
         <li>Quit or refresh and your attempt ends.</li>
         <li>Difficulty rises from Monday to Sunday. Friday is a special mode.</li>
         <li>Score 5 or more to count towards your streak.</li>
         <li>Your streak survives up to 2 missed days in any 7.</li>
       </ul>
-    </div>
+    </details>
 
-    <button class="start-btn" style="width:100%;margin-bottom:8px" id="daily-start-btn" onclick="startDailyChallenge()">Start challenge</button>
-    <button class="daily-practice-link" onclick="openPracticeFromDaily('intro')">Or try practice mode</button>
+    <button class="daily-practice-link" onclick="openPracticeFromDaily('intro')">Or play a practice game</button>
   </div>
 
   <!-- Game screen (reuses main game style) -->
@@ -4767,26 +4902,26 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
     <div class="question" id="daily-question-display"></div>
     <input class="answer-input" id="daily-answer-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
     <div id="daily-skip-wrap" style="min-height:28px;margin-top:12px;text-align:center">
-      <button id="daily-skip-btn" onclick="skipDailyQuestion()" style="display:none;background:none;border:none;font-family:'Roboto Mono',monospace;font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#bbb;cursor:pointer;padding:4px 8px;border-bottom:1px solid var(--border);">Skip</button>
+      <button id="daily-skip-btn" onclick="skipDailyQuestion()" style="display:none;background:none;border:none;font-family:'Roboto Mono',monospace;font-size:0.78rem;letter-spacing:2px;text-transform:uppercase;color:var(--text);cursor:pointer;padding:4px 8px;border-bottom:1px solid var(--border);">Skip</button>
     </div>
   </div>
 
   <!-- Results screen -->
   <div id="daily-results" style="display:none;width:100%;flex-direction:column;align-items:center;">
-    <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:6px">Today's result</div>
+    <div style="font-size:0.75rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Today's result</div>
     <div style="font-size:clamp(3rem,14vw,5.5rem);font-weight:700;letter-spacing:-3px;line-height:1;margin-bottom:4px" id="daily-final-score">0</div>
-    <div id="daily-streak-line" style="display:none;font-size:0.82rem;font-weight:700;color:var(--text);text-align:center;margin-top:8px"></div>
-    <div style="font-size:0.62rem;color:#999;margin-bottom:24px;text-align:center;width:100%;white-space:pre-line;line-height:1.7" id="daily-rank-label"></div>
+    <div id="daily-streak-line" style="display:none;font-size:1.05rem;font-weight:700;color:var(--text);text-align:center;margin-top:8px"></div>
+    <div style="font-size:0.85rem;color:var(--muted);margin-bottom:24px;text-align:center;width:100%;white-space:pre-line;line-height:1.7" id="daily-rank-label"></div>
     <!-- Leaderboard -->
     <div style="width:100%;margin-top:4px">
-      <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:8px;text-align:center">Daily Challenge Leaderboard</div>
+      <div id="daily-lb-heading" style="display:none;font-size:0.75rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:8px;text-align:center">Daily Challenge Leaderboard</div>
       <div id="daily-lb-list" style="display:flex;flex-direction:column;gap:2px"></div>
-      <div id="daily-lb-loading" style="font-size:0.65rem;color:#bbb;text-align:center;padding:20px 0">Loading...</div>
-      <div id="daily-lb-empty" style="display:none;font-size:0.65rem;color:#bbb;text-align:center;padding:20px 0">No scores yet today.</div>
+      <div id="daily-lb-loading" style="font-size:0.85rem;color:var(--faint);text-align:center;padding:20px 0">Loading...</div>
+      <div id="daily-lb-empty" style="display:none;font-size:0.85rem;color:var(--faint);text-align:center;padding:20px 0">No scores yet today.</div>
     </div>
     <button class="btn-outline" id="daily-share-btn" onclick="shareDailyScore()" style="width:100%;margin-top:16px">Share result</button>
-    <div id="daily-share-copied" style="display:none;font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;text-align:center;margin-top:8px;padding:6px">Copied ✓</div>
-    <button class="daily-practice-link" onclick="openPracticeFromDaily('results')" style="margin-top:12px">Try practice mode</button>
+    <div id="daily-share-copied" style="display:none;font-size:0.75rem;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-align:center;margin-top:8px;padding:6px">Copied ✓</div>
+    <button class="daily-practice-link" onclick="openPracticeFromDaily('results')" style="margin-top:12px">Play a practice game</button>
   </div>
 
 </div>
@@ -4806,7 +4941,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
     <div class="chart-rows" id="chart-rows"></div>
   </div>
   <div class="btn-row">
-    <button class="btn-outline" id="practice-last-btn" onclick="startPracticeFromResults()" disabled>Practice mistakes</button>
+    <button class="btn-outline" id="practice-last-btn" onclick="startPracticeFromResults()" disabled>Train on mistakes</button>
     <button class="btn-outline btn-fill" onclick="showPage('play')">Play again</button>
   </div>
   <!-- Feedback prompt: prominent, non-dismissible, shown once per user (until completed) -->
@@ -4874,7 +5009,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
     <thead><tr><th>#</th><th>Date</th><th>Dur</th><th>Score</th><th>Acc</th><th>Avg time</th><th></th></tr></thead>
     <tbody id="history-tbody"></tbody>
   </table>
-  <div class="no-history" id="no-history" style="display:none"><div style="font-size:1.5rem;margin-bottom:8px">&#9203;</div><div style="font-weight:700;margin-bottom:6px">No games yet</div><div style="font-size:0.6rem;line-height:1.7">Play your first game on the Play tab to start tracking your progress. Your scores, accuracy and average time will appear here.</div></div>
+  <div class="no-history" id="no-history" style="display:none"><div style="font-size:1.5rem;margin-bottom:8px">&#9203;</div><div style="font-weight:700;margin-bottom:6px">No games yet</div><div style="font-size:0.6rem;line-height:1.7">Play today's Daily Challenge or a practice game to start tracking your progress. Your scores, accuracy and average time will appear here.</div></div>
   <button class="btn-outline" style="width:100%;margin-top:4px" onclick="clearHistory()">Clear all history</button>
 </div>
 
@@ -4890,7 +5025,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
         <div class="pattern-card-title">Weakest questions</div>
       </div>
       <div class="pattern-card-detail">Your 20 most struggled questions based on your skill profile.</div>
-      <button class="pattern-practice-btn" onclick="startMLPractice()">Practice now</button>
+      <button class="pattern-practice-btn" onclick="startMLPractice()">Train now</button>
     </div>
 
     <!-- Patterns (specialised + detected patterns merged) -->
@@ -4909,7 +5044,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
     <div class="question" id="practice-question"></div>
     <input class="answer-input" id="practice-input" type="text" inputmode="numeric" autocomplete="off" spellcheck="false">
     <div style="margin-top:28px;text-align:center">
-      <button class="btn-outline" style="width:auto;padding:8px 20px" onclick="endPracticeSession()">End practice</button>
+      <button class="btn-outline" style="width:auto;padding:8px 20px" onclick="endPracticeSession()">End training</button>
     </div>
   </div>
   <div id="practice-done" style="display:none;width:100%;text-align:center;padding:40px 0">
@@ -5209,21 +5344,20 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
   function el(id){ return document.getElementById(id); }
   function sched(fn, ms){ if (timer) clearTimeout(timer); timer = setTimeout(fn, ms); }
   // True only on the Play landing (config screen visible) — not during a game or on other tabs.
+  // Runs only while the first-visit welcome on the Daily intro screen is showing
+  // (it's hidden once the player has made a Daily attempt or played any game).
   function active(){
     if (document.hidden) return false;
-    var banner = el('welcome-banner');
-    if (!banner || banner.style.display === 'none') return false;  // box dismissed / hidden
-    var play = el('page-play');
-    if (!play || !play.classList.contains('active')) return false;
-    var cfg = el('config-screen');
-    if (cfg && cfg.style.display === 'none') return false;  // a game is in progress
+    var page = el('page-daily');
+    if (!page || !page.classList.contains('active')) return false;
+    var welcome = el('daily-welcome');
+    if (!welcome || welcome.style.display === 'none') return false;
+    var info = el('daily-info');
+    if (info && info.style.display === 'none') return false;  // in a game or on results
     return true;
   }
-  // On the landing show the title + illustration; during a game hide both and
-  // keep only the "auto-submit" caption.
   function setVisible(v){
     var box = el('intro-demo'); if (box) box.style.display = v ? 'flex' : 'none';
-    var title = el('welcome-title'); if (title) title.style.display = v ? '' : 'none';
   }
 
   function showPhase(which){  // 'intro' (tagline) or 'play' (q/a)
