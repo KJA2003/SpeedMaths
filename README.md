@@ -26,8 +26,8 @@ lives in the browser's `localStorage`.
 ## Features
 
 - **Daily** — the Daily Challenge (see [below](#daily-challenge)). The landing page
-  for returning players.
-- **Play** — choose operations (+, −, ×, ÷) and number ranges, pick a duration
+  and main game for everyone.
+- **Play** — practice mode, the alternative to the Daily: choose operations (+, −, ×, ÷) and number ranges, pick a duration
   (30 s / 1 / 2 / 5 / 10 min), and answer as many as you can. A live **pace bar**
   shows your speed vs your own average.
 - **Results** — score, accuracy, per-operation timing chart, and instant
@@ -78,16 +78,18 @@ There's no pause: the clock runs off wall-clock time and the tabs are hidden dur
 the game. An unfinished attempt is settled on the next visit — today's when the
 Daily page opens, earlier days' on load — and reported as `how_ended: abandoned`.
 
-**Links.** `nerdlegame.com/mathlete/#daily` always opens the Daily Challenge, even for
-a first-time visitor (who otherwise lands on Play with the welcome banner). The
-share text uses this link; links from other nerdle games should too.
+**Landing and links.** Everyone lands on the Daily. First-time visitors see a short
+welcome above it; "Or try practice mode" under the Start button, and "Try practice
+mode" on the results screen, lead to the Play tab. The share text links to
+`nerdlegame.com/mathlete/#daily`, which also switches an open Mathlete back to the Daily.
 
 **Leaderboard.** Scores go to the Supabase `daily_scores` table through the same
 handle dialog as the main leaderboard. One attempt per device is enforced in the
 browser only (local storage), not by the database.
 
-**Analytics events** (GA4, via `gaEvent`). Every event carries `challenge_date`,
-`day_of_week` and `friday_mode` (the mode id, or `none`):
+**Analytics events** (GA4, via `gaEvent`). `daily_start`, `daily_complete` and
+`daily_share` carry `challenge_date`, `day_of_week` and `friday_mode` (the mode id,
+or `none`):
 
 | Event | Extra parameters |
 |---|---|
@@ -95,12 +97,11 @@ browser only (local storage), not by the database.
 | `daily_complete` | `score`, `streak`, `did_complete` (`true` only if time ran out), `how_ended` (`time`, `quit` or `abandoned`) |
 | `daily_share` | — |
 | `daily_announce_view` / `daily_announce_dismiss` | — (the one-time "New: the Daily Challenge" card) |
-| `daily_banner_click` | — ("Play today's challenge" in the new-visitor welcome banner) |
+| `daily_to_practice` | `from` (`intro` or `results`): a practice-mode link on the Daily |
 
 **Launch announcement.** Players with Mathlete history from before the launch
 (`DAILY_LAUNCH_TS`, 31 Oct 2026) see a one-time card on the Daily page explaining the
-new streak rules. New visitors get a "Play today's challenge" link in the welcome
-banner. The Daily tab shows a dot until it's first opened.
+new streak rules.
 
 To use these parameters in GA4's standard reports they must be registered as
 custom dimensions; the BigQuery export has them regardless.
@@ -302,9 +303,7 @@ arith_learn        Learn-mode level progress + stars
 arith_pace         Pace-bar preference
 arith_streak       Daily Challenge streak: streak, lastDate, streakStart, activeDates
 mathlete_daily_YYYY-MM-DD  That day's Daily attempt: score, ts, done (false = unfinished)
-mathlete_daily_whatsnew_seen  '1' once the launch card has been dismissed
-mathlete_daily_tab_seen       '1' once the Daily tab has been opened (hides the dot)
-arith_name         Legacy free-text leaderboard name (old build)
+mathlete_daily_whatsnew_seen  '1' once the launch card has been dismissedarith_name         Legacy free-text leaderboard name (old build)
 mathlete_username  Leaderboard handle (HANDLE_xxxxxx); set once, editable
 mathlete_device_id Persistent anonymous device id (ML logging)
 mathlete_user_id   Cached nerdle account id (set once login is wired)

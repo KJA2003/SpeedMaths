@@ -698,11 +698,9 @@ body { background: var(--bg); color: var(--text); }
 .rules-list { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 0.62rem; line-height: 1.6; color: var(--muted); }
 .rules-list li { display: flex; gap: 8px; }
 .rules-list li::before { content: '\2022'; color: var(--faint); flex-shrink: 0; }
-/* Daily Challenge launch: "New" tab badge, what's-new card, welcome-banner link */
-/* a dot rather than a word: with 7 tabs a word wraps under "Daily" on phones */
-.nav-new { display: inline-block; width: 6px; height: 6px; margin-left: 3px; border-radius: 50%; background: var(--accent); vertical-align: super; }
-.nav-new[hidden] { display: none; }
-:root.playing #daily-whatsnew, :root.playing #welcome-daily { display: none !important; }
+/* Daily Challenge launch: what's-new card for existing players */
+:root.playing #daily-whatsnew { display: none !important; }
+.daily-practice-link { background: none; border: none; font-family: 'Roboto Mono', monospace; font-size: 0.6rem; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); cursor: pointer; padding: 8px; text-decoration: underline; text-underline-offset: 3px; }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -4096,21 +4094,17 @@ function dismissDailyWhatsNew() {
   gaEvent('daily_announce_dismiss', {});
 }
 
-// "New" badge on the Daily tab until the player first opens it.
-function renderDailyNavBadge() {
-  var b = document.getElementById('daily-nav-new');
-  if (b) b.hidden = lsFlag('mathlete_daily_tab_seen');
-}
-
-function openDailyFromBanner() {
-  gaEvent('daily_banner_click', {});
-  showPage('daily');
+// Practice mode (the Play tab) is the alternative route from the Daily.
+// `from` is 'intro' or 'results'.
+function openPracticeFromDaily(from) {
+  gaEvent('daily_to_practice', { from: from });
+  showPage('play');
 }
 
 function initDailyChallenge() {
-  setLsFlag('mathlete_daily_tab_seen');
-  renderDailyNavBadge();
   renderDailyWhatsNew();
+  // First-time visitors get a short welcome above the challenge
+  document.getElementById('daily-welcome').style.display = isFirstVisit() ? 'block' : 'none';
   var dateStr = todayStr();
   _dailyDateStr = dateStr;
   _dailyCfg = getDailyConfig(dateStr);
@@ -4529,7 +4523,7 @@ window.startDailyChallenge = startDailyChallenge;
 window.skipDailyQuestion = skipDailyQuestion;
 window.shareDailyScore = shareDailyScore;
 window.dismissDailyWhatsNew = dismissDailyWhatsNew;
-window.openDailyFromBanner = openDailyFromBanner;
+window.openPracticeFromDaily = openPracticeFromDaily;
 window.buildDailyShareText = buildDailyShareText;
 window.askQuit = askQuit;
 window.keepPlaying = keepPlaying;
@@ -4569,13 +4563,10 @@ window.startLearnLevel = startLearnLevel;
 window.retryLearnLevel = retryLearnLevel;
 // Init daily on load (deferred so all functions are defined)
 settleStaleDailyAttempts();
-renderDailyNavBadge();
-// A #daily link always opens the Daily Challenge. Otherwise new visitors land on
-// Play (with the welcome banner) and returning players land on Daily.
+// Everyone lands on the Daily Challenge; practice mode is the Play tab.
+showPage('daily');
+// #daily links (already in shared results) also switch back to the Daily if Mathlete is open
 function wantsDaily() { return /^#daily$/i.test(location.hash || ''); }
-if (wantsDaily()) { showPage('daily'); }
-else if (isFirstVisit()) { showPage('play'); }
-else if (document.getElementById('page-daily') && document.getElementById('page-daily').classList.contains('active')) { initDailyChallenge(); }
 window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('daily'); });
 })();
 });
@@ -4612,7 +4603,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
 </div>
 
 <nav class="nav">
-  <button class="nav-btn active" data-page="daily">Daily<span class="nav-new" id="daily-nav-new" title="New" aria-label="New" hidden></span></button>
+  <button class="nav-btn active" data-page="daily">Daily</button>
   <button class="nav-btn" data-page="play">Play</button>
   <button class="nav-btn" data-page="results">Results</button>
   <button class="nav-btn" data-page="history">History</button>
@@ -4635,10 +4626,6 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
       </div>
     </div>
     <div style="font-size:0.64rem;color:var(--text);line-height:1.5;text-align:center;margin-top:10px;white-space:nowrap">Type your answer — auto-submits when correct.</div>
-    <div id="welcome-daily" style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;text-align:center">
-      <div style="font-size:0.64rem;color:var(--text);line-height:1.5;margin-bottom:8px"><strong>New every day:</strong> a 2-minute challenge, the same for everyone.</div>
-      <button class="btn-outline" onclick="openDailyFromBanner()" style="width:100%">Play today's challenge</button>
-    </div>
   </div>
 
   <div id="config-screen" style="width:100%">
@@ -4726,6 +4713,11 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
 
   <!-- Pre-game info screen -->
   <div id="daily-info" style="width:100%;display:flex;flex-direction:column;align-items:center;">
+    <!-- First visit only -->
+    <div id="daily-welcome" style="display:none;width:100%;text-align:center;margin-bottom:18px">
+      <div style="color:var(--muted);font-size:0.92rem;font-family:'Roboto Mono',monospace;margin-bottom:6px">Welcome to <span class="brand-mark" style="font-size:1.3rem;vertical-align:-1px"><span class="m-word">mathlete</span><span class="m-dot">.</span></span></div>
+      <div style="font-size:0.64rem;color:var(--text);line-height:1.5">One 2-minute maths challenge a day. Type your answer and it submits itself when it's correct.</div>
+    </div>
     <div style="font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;margin-bottom:6px" id="daily-date-label"></div>
     <div style="font-size:1.8rem;font-weight:700;letter-spacing:-1px;margin-bottom:4px" id="daily-title">Daily Challenge</div>
     <div style="font-size:0.65rem;color:#999;margin-bottom:20px" id="daily-sub">2 minutes · same for everyone</div>
@@ -4762,6 +4754,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
     </div>
 
     <button class="start-btn" style="width:100%;margin-bottom:8px" id="daily-start-btn" onclick="startDailyChallenge()">Start challenge</button>
+    <button class="daily-practice-link" onclick="openPracticeFromDaily('intro')">Or try practice mode</button>
   </div>
 
   <!-- Game screen (reuses main game style) -->
@@ -4793,6 +4786,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
     </div>
     <button class="btn-outline" id="daily-share-btn" onclick="shareDailyScore()" style="width:100%;margin-top:16px">Share result</button>
     <div id="daily-share-copied" style="display:none;font-size:0.58rem;letter-spacing:2px;text-transform:uppercase;color:#999;text-align:center;margin-top:8px;padding:6px">Copied ✓</div>
+    <button class="daily-practice-link" onclick="openPracticeFromDaily('results')" style="margin-top:12px">Try practice mode</button>
   </div>
 
 </div>
