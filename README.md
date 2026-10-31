@@ -94,6 +94,13 @@ browser only (local storage), not by the database.
 | `daily_start` | — |
 | `daily_complete` | `score`, `streak`, `did_complete` (`true` only if time ran out), `how_ended` (`time`, `quit` or `abandoned`) |
 | `daily_share` | — |
+| `daily_announce_view` / `daily_announce_dismiss` | — (the one-time "New: the Daily Challenge" card) |
+| `daily_banner_click` | — ("Play today's challenge" in the new-visitor welcome banner) |
+
+**Launch announcement.** Players with Mathlete history from before the launch
+(`DAILY_LAUNCH_TS`, 31 Oct 2026) see a one-time card on the Daily page explaining the
+new streak rules. New visitors get a "Play today's challenge" link in the welcome
+banner. The Daily tab shows a dot until it's first opened.
 
 To use these parameters in GA4's standard reports they must be registered as
 custom dimensions; the BigQuery export has them regardless.
@@ -295,6 +302,8 @@ arith_learn        Learn-mode level progress + stars
 arith_pace         Pace-bar preference
 arith_streak       Daily Challenge streak: streak, lastDate, streakStart, activeDates
 mathlete_daily_YYYY-MM-DD  That day's Daily attempt: score, ts, done (false = unfinished)
+mathlete_daily_whatsnew_seen  '1' once the launch card has been dismissed
+mathlete_daily_tab_seen       '1' once the Daily tab has been opened (hides the dot)
 arith_name         Legacy free-text leaderboard name (old build)
 mathlete_username  Leaderboard handle (HANDLE_xxxxxx); set once, editable
 mathlete_device_id Persistent anonymous device id (ML logging)

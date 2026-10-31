@@ -698,6 +698,11 @@ body { background: var(--bg); color: var(--text); }
 .rules-list { list-style: none; display: flex; flex-direction: column; gap: 6px; font-size: 0.62rem; line-height: 1.6; color: var(--muted); }
 .rules-list li { display: flex; gap: 8px; }
 .rules-list li::before { content: '\2022'; color: var(--faint); flex-shrink: 0; }
+/* Daily Challenge launch: "New" tab badge, what's-new card, welcome-banner link */
+/* a dot rather than a word: with 7 tabs a word wraps under "Daily" on phones */
+.nav-new { display: inline-block; width: 6px; height: 6px; margin-left: 3px; border-radius: 50%; background: var(--accent); vertical-align: super; }
+.nav-new[hidden] { display: none; }
+:root.playing #daily-whatsnew, :root.playing #welcome-daily { display: none !important; }
 </style>
 <script>
 // Apply saved theme ASAP (before body paints) to avoid a flash of the wrong theme.
@@ -4057,7 +4062,55 @@ function saveDailyResult(score, done) {
 }
 
 // ── Render info screen ────────────────────────────────────────────
+// ── Launch announcement ───────────────────────────────────────────
+// Deploy time of the Daily Challenge. Anyone with Mathlete history from before
+// then gets the one-time what's-new card, because their streak rules changed.
+var DAILY_LAUNCH_TS = Date.UTC(2026, 9, 31, 17, 40);
+
+function isPreLaunchPlayer() {
+  try {
+    if (loadData().games.some(function(g) { return g.ts && g.ts < DAILY_LAUNCH_TS; })) return true;
+  } catch(e) {}
+  var s = loadStreak();
+  return !!(s.lastDate && s.lastDate < '2026-10-31');
+}
+
+function lsFlag(key) { try { return localStorage.getItem(key) !== null; } catch(e) { return true; } }
+function setLsFlag(key) { try { localStorage.setItem(key, '1'); } catch(e) {} }
+
+function renderDailyWhatsNew() {
+  var el = document.getElementById('daily-whatsnew');
+  if (!el) return;
+  if (lsFlag('mathlete_daily_whatsnew_seen') || !isPreLaunchPlayer()) { el.style.display = 'none'; return; }
+  var n = currentStreak();
+  document.getElementById('daily-whatsnew-streak').innerHTML =
+    // one span: .rules-list items are flex rows, so bare text + <strong> would split into columns
+    '<span><strong>Your streak has changed:</strong> only the Daily counts now, and you can miss up to 2 days in any 7.' +
+    (n > 0 ? ' Your ' + n + '-day streak has carried over.' : '') + '</span>';
+  if (el.style.display !== 'block') { el.style.display = 'block'; gaEvent('daily_announce_view', {}); }
+}
+
+function dismissDailyWhatsNew() {
+  setLsFlag('mathlete_daily_whatsnew_seen');
+  document.getElementById('daily-whatsnew').style.display = 'none';
+  gaEvent('daily_announce_dismiss', {});
+}
+
+// "New" badge on the Daily tab until the player first opens it.
+function renderDailyNavBadge() {
+  var b = document.getElementById('daily-nav-new');
+  if (b) b.hidden = lsFlag('mathlete_daily_tab_seen');
+}
+
+function openDailyFromBanner() {
+  gaEvent('daily_banner_click', {});
+  showPage('daily');
+}
+
 function initDailyChallenge() {
+  setLsFlag('mathlete_daily_tab_seen');
+  renderDailyNavBadge();
+  renderDailyWhatsNew();
   var dateStr = todayStr();
   _dailyDateStr = dateStr;
   _dailyCfg = getDailyConfig(dateStr);
@@ -4475,6 +4528,8 @@ window.quitGame = quitGame;
 window.startDailyChallenge = startDailyChallenge;
 window.skipDailyQuestion = skipDailyQuestion;
 window.shareDailyScore = shareDailyScore;
+window.dismissDailyWhatsNew = dismissDailyWhatsNew;
+window.openDailyFromBanner = openDailyFromBanner;
 window.buildDailyShareText = buildDailyShareText;
 window.askQuit = askQuit;
 window.keepPlaying = keepPlaying;
@@ -4514,6 +4569,7 @@ window.startLearnLevel = startLearnLevel;
 window.retryLearnLevel = retryLearnLevel;
 // Init daily on load (deferred so all functions are defined)
 settleStaleDailyAttempts();
+renderDailyNavBadge();
 // A #daily link always opens the Daily Challenge. Otherwise new visitors land on
 // Play (with the welcome banner) and returning players land on Daily.
 function wantsDaily() { return /^#daily$/i.test(location.hash || ''); }
@@ -4556,7 +4612,7 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
 </div>
 
 <nav class="nav">
-  <button class="nav-btn active" data-page="daily">Daily</button>
+  <button class="nav-btn active" data-page="daily">Daily<span class="nav-new" id="daily-nav-new" title="New" aria-label="New" hidden></span></button>
   <button class="nav-btn" data-page="play">Play</button>
   <button class="nav-btn" data-page="results">Results</button>
   <button class="nav-btn" data-page="history">History</button>
@@ -4579,6 +4635,10 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
       </div>
     </div>
     <div style="font-size:0.64rem;color:var(--text);line-height:1.5;text-align:center;margin-top:10px;white-space:nowrap">Type your answer — auto-submits when correct.</div>
+    <div id="welcome-daily" style="border-top:1px solid var(--border);margin-top:12px;padding-top:10px;text-align:center">
+      <div style="font-size:0.64rem;color:var(--text);line-height:1.5;margin-bottom:8px"><strong>New every day:</strong> a 2-minute challenge, the same for everyone.</div>
+      <button class="btn-outline" onclick="openDailyFromBanner()" style="width:100%">Play today's challenge</button>
+    </div>
   </div>
 
   <div id="config-screen" style="width:100%">
@@ -4651,6 +4711,18 @@ window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('d
 
 <!-- DAILY CHALLENGE -->
 <div class="page active" id="page-daily">
+
+  <!-- What's new: shown once to players who used Mathlete before the Daily launched -->
+  <div id="daily-whatsnew" style="display:none;width:100%;background:var(--surface);border:1px solid var(--accent);padding:14px 18px;margin-bottom:16px;">
+    <div style="font-size:0.55rem;letter-spacing:2px;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:4px">New</div>
+    <div style="font-size:0.95rem;font-weight:700;color:var(--text);margin-bottom:10px">The Daily Challenge</div>
+    <ul class="rules-list">
+      <li>One 2-minute game a day, the same questions for everyone, with its own leaderboard.</li>
+      <li id="daily-whatsnew-streak"></li>
+      <li>Play, Practise, Learn and the all-time Leaderboard are still in the tabs.</li>
+    </ul>
+    <button class="btn-outline" onclick="dismissDailyWhatsNew()" style="width:100%;margin-top:12px">Got it</button>
+  </div>
 
   <!-- Pre-game info screen -->
   <div id="daily-info" style="width:100%;display:flex;flex-direction:column;align-items:center;">
