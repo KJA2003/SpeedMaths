@@ -3895,6 +3895,14 @@ function getDailyConfig(dateStr) {
   // Mul B range
   var mulBMax = [20, 30, 50, 75, 100, 100, 100][difficulty - 1];
 
+  // Friday ×/÷-only modes are times tables up to 15 × 15: two minutes of nothing
+  // but 2–12 × 2–100 is a slog. Prime and single-digit modes keep their own limits.
+  if (specialMode && !specialMode.primeOnly && !specialMode.oneDigit &&
+      ops.every(function(op) { return op === 'multiplication' || op === 'division'; })) {
+    mulAMax = 15;
+    mulBMax = 15;
+  }
+
   var dayNames = ['','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   var diffLabels = ['','Very Easy','Easy','Medium','Medium-Hard','Hard','Very Hard','Extreme'];
 

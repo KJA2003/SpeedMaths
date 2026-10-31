@@ -61,7 +61,9 @@ to Sunday ("Extreme", add/subtract up to 100, multiply up to 12 × 100), like
 Crossnerdle. Fridays use one of eight special modes, rotating weekly (by week of the
 year, so the cycle restarts each January): addition & subtraction, addition,
 subtraction, multiplication & division, multiplication, division, prime numbers,
-and single-digit answers. See `getDailyConfig` and `DAILY_SPECIAL_MODES`.
+and single-digit answers. The three multiplication/division modes use times tables
+up to 15 × 15 rather than the usual Friday ranges. See `getDailyConfig` and
+`DAILY_SPECIAL_MODES`.
 
 **Streak.** Only the Daily Challenge counts; Play and Learn don't. Each day with 5+
 correct adds 1. The streak survives up to 2 missed days in any 7 (a day played with
