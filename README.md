@@ -350,6 +350,20 @@ mathlete_survey_done    survey id the player has completed (once-per-user dedup)
 
 ## Deployment
 
+### Deploy log
+
+Times are UK time (GMT). Add a line for each deploy. The live file's upload time is
+`aws s3api head-object --bucket nerdle-serverless-app --key mathlete/index.html --query LastModified`.
+
+| Deployed | What |
+|---|---|
+| 2026-10-31 21:07 | **Current.** Daily page rework, Practice/Train tabs, Daily answers logged to the skill model and `question_log`, new Daily leaderboard rules. |
+| 2026-10-31 18:33 | Daily is the default landing page for everyone; practice-mode links. |
+| 2026-10-31 18:22 | Launch announcement (what's-new card for existing players). |
+| 2026-10-31 18:16 | Friday ×/÷ modes capped at 15 × 15. |
+| 2026-10-31 17:42 | **Daily Challenge relaunch** (first live version: Kiran's Daily Challenge plus the `#daily` link and settling of abandoned attempts). |
+| 2026-07-18 09:54 | Last version before the relaunch. |
+
 Mathlete is served at **<https://nerdlegame.com/mathlete>** from the shared
 nerdle serverless app: S3 bucket **`nerdle-serverless-app`** (prefix `/mathlete`)
 behind CloudFront distribution **`E2GV7CU2G3KWL8`**. A viewer-request Lambda on
