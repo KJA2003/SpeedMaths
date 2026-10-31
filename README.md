@@ -1,9 +1,9 @@
 # Mathlete
 
-**Mental-maths training by [nerdle](https://www.nerdlegame.com).** A fast-paced
-arithmetic practice tool — not a daily puzzle. Play timed sprints, track your
-progress over time, and let a lightweight on-device skill model steer you toward
-your weak spots.
+**Daily mental-maths challenge by [nerdle](https://www.nerdlegame.com).** Every day
+there's a 2-minute Daily Challenge, the same for everyone, with its own leaderboard
+and streak. Alongside it, timed practice sprints track your progress over time, and
+a lightweight on-device skill model steers you toward your weak spots.
 
 > Working branch for the nerdle launch: **`mathlete`**.
 > Originally authored as *SpeedMaths*; being adapted into a nerdle brain-training game.
@@ -16,14 +16,17 @@ Mathlete is a single self-contained `index.html` — all HTML, CSS and vanilla J
 **no build step and no dependencies**. It runs anywhere a static file can be
 served. Two hosted backends are used at runtime:
 
-- **Supabase** — the leaderboard and the ML training-data log.
-- **Google Analytics (GA4)** — basic usage analytics (`G-VQLZ9L5D0H`).
+- **Supabase** — the leaderboards (daily and all-time) and the ML training-data log.
+- **Google Analytics (GA4)** — usage analytics, sent to two properties:
+  `G-VQLZ9L5D0H` (original) and `G-MRLY2WKXE9` (nerdle games, exported to BigQuery).
 
 Everything else (game history, the skill model, level progress, preferences)
 lives in the browser's `localStorage`.
 
 ## Features
 
+- **Daily** — the Daily Challenge (see [below](#daily-challenge)). The landing page
+  for returning players.
 - **Play** — choose operations (+, −, ×, ÷) and number ranges, pick a duration
   (30 s / 1 / 2 / 5 / 10 min), and answer as many as you can. A live **pace bar**
   shows your speed vs your own average.
@@ -38,6 +41,60 @@ lives in the browser's `localStorage`.
   with a display-name submission and profanity filter.
 - **Learn** — a generated level ladder (1 → 10 000+) with star targets.
 - **Dark mode** — follows the OS, with a manual toggle in the header.
+
+## Daily Challenge
+
+One 2-minute attempt a day. Everyone gets the same questions: 600 are generated from
+the date with a seeded random number generator (`generateDailyQuestions`), so no
+server is needed.
+
+**Rules shown to players** (the "How it works" panel on the Daily intro screen):
+
+- One attempt a day. Everyone gets the same questions.
+- Quit or refresh and your attempt ends.
+- Difficulty rises from Monday to Sunday. Friday is a special mode.
+- Score 5 or more to count towards your streak.
+- Your streak survives up to 2 missed days in any 7.
+
+**Difficulty.** Number ranges grow from Monday ("Very Easy", add/subtract up to 20)
+to Sunday ("Extreme", add/subtract up to 100, multiply up to 12 × 100), like
+Crossnerdle. Fridays use one of eight special modes, rotating weekly (by week of the
+year, so the cycle restarts each January): addition & subtraction, addition,
+subtraction, multiplication & division, multiplication, division, prime numbers,
+and single-digit answers. See `getDailyConfig` and `DAILY_SPECIAL_MODES`.
+
+**Streak.** Only the Daily Challenge counts; Play and Learn don't. Each day with 5+
+correct adds 1. The streak survives up to 2 missed days in any 7 (a day played with
+fewer than 5 correct counts as missed), and days before a streak began can't count as
+missed, so a new streak is safe from day one. The displayed streak is recalculated
+every time it's shown (`currentStreak`), so a lapsed streak shows as 0. Shown on the
+Daily results screen and on History.
+
+**Attempts.** The attempt is saved the moment the game starts and the score is
+updated after every correct answer, so a refresh or closed tab can't give a replay.
+There's no pause: the clock runs off wall-clock time and the tabs are hidden during
+the game. An unfinished attempt is settled on the next visit — today's when the
+Daily page opens, earlier days' on load — and reported as `how_ended: abandoned`.
+
+**Links.** `nerdlegame.com/mathlete/#daily` always opens the Daily Challenge, even for
+a first-time visitor (who otherwise lands on Play with the welcome banner). The
+share text uses this link; links from other nerdle games should too.
+
+**Leaderboard.** Scores go to the Supabase `daily_scores` table through the same
+handle dialog as the main leaderboard. One attempt per device is enforced in the
+browser only (local storage), not by the database.
+
+**Analytics events** (GA4, via `gaEvent`). Every event carries `challenge_date`,
+`day_of_week` and `friday_mode` (the mode id, or `none`):
+
+| Event | Extra parameters |
+|---|---|
+| `daily_start` | — |
+| `daily_complete` | `score`, `streak`, `did_complete` (`true` only if time ran out), `how_ended` (`time`, `quit` or `abandoned`) |
+| `daily_share` | — |
+
+To use these parameters in GA4's standard reports they must be registered as
+custom dimensions; the BigQuery export has them regardless.
 
 ## Skill model (the "ML")
 
@@ -95,6 +152,7 @@ Project: `xlsyaqvkziurxzqgbqps` — the anon key is embedded in `index.html`
 | Object | Type | Purpose |
 |---|---|---|
 | `leaderboard` | table | Submitted scores (`name`, `score`, `duration`, `created_at`). |
+| `daily_scores` | table | Daily Challenge scores (`name`, `score`, `challenge_date`, `device_id`). The page inserts and reads it with the anon key. |
 | `get_best_scores` | RPC | Returns top scores for a duration + time window. |
 | `question_log` | table | One row per answered question — ML training data. |
 | `survey_responses` | table | One row per completed feedback survey (see below). |
@@ -233,6 +291,8 @@ arith_v3           Game history + trouble questions + totalCorrect
 arith_skills       On-device skill model (θ per skill key)
 arith_learn        Learn-mode level progress + stars
 arith_pace         Pace-bar preference
+arith_streak       Daily Challenge streak: streak, lastDate, streakStart, activeDates
+mathlete_daily_YYYY-MM-DD  That day's Daily attempt: score, ts, done (false = unfinished)
 arith_name         Legacy free-text leaderboard name (old build)
 mathlete_username  Leaderboard handle (HANDLE_xxxxxx); set once, editable
 mathlete_device_id Persistent anonymous device id (ML logging)
@@ -287,7 +347,7 @@ Values worth knowing, all currently in `index.html` / `package.json`:
 
 | What | Where | Value |
 |---|---|---|
-| GA4 measurement id | `index.html` head | `G-VQLZ9L5D0H` |
+| GA4 measurement ids | `index.html` head | `G-VQLZ9L5D0H`, `G-MRLY2WKXE9` |
 | Supabase URL | `index.html` (`SUPA_URL`) | `https://xlsyaqvkziurxzqgbqps.supabase.co` |
 | Supabase anon key | `index.html` (`SUPA_KEY`) | public anon JWT |
 | S3 bucket / prefix | `package.json` | `nerdle-serverless-app` / `mathlete` |

@@ -3289,9 +3289,11 @@ function streakIsAlive(s, today, todayLost) {
   return missed <= 2;
 }
 
-function updateStreak() {
+// asOf credits an earlier day instead of today (used when settling an attempt
+// abandoned on a previous day); it must not be before the last counted day.
+function updateStreak(asOf) {
   var s = loadStreak();
-  var today = todayStr();
+  var today = asOf || todayStr();
   if (s.lastDate === today) return false; // already counted today
 
   var alive = streakIsAlive(s, today, false);  // the player is completing today's Daily right now
@@ -4026,7 +4028,10 @@ var _dailyDone = false;
 var _dailyInProgress = false;
 var _dailyEndTs = 0;        // wall-clock end time: backgrounding the tab can't stop the clock
 var _dailyDateStr = null;   // the date this attempt belongs to, locked when the game starts
-var DAILY_RESULT_NOTE = 'Come back tomorrow for a new challenge\n5+ correct counts towards your streak';
+// Opens straight onto the Daily Challenge, even for a first-time visitor. Used by
+// the share text and by links from other nerdle games.
+var DAILY_LINK = 'nerdlegame.com/mathlete/#daily';
+var DAILY_RESULT_NOTE ='Come back tomorrow for a new challenge\n5+ correct counts towards your streak';
 
 function getDailyStorageKey() {
   return 'mathlete_daily_' + (_dailyDateStr || todayStr());
@@ -4232,11 +4237,13 @@ document.getElementById('daily-answer-input').addEventListener('input', function
 
 // ── End & results ─────────────────────────────────────────────────
 // Parameters common to every Daily Challenge analytics event. friday_mode is the
-// special mode id on Fridays and 'none' on other days.
-function dailyEventParams(extra) {
-  var cfg = _dailyCfg || getDailyConfig(_dailyDateStr || todayStr());
+// special mode id on Fridays and 'none' on other days. dateStr overrides the
+// current attempt's date (for settling an earlier day's attempt).
+function dailyEventParams(extra, dateStr) {
+  var date = dateStr || _dailyDateStr || todayStr();
+  var cfg = (_dailyCfg && _dailyCfg.dateStr === date) ? _dailyCfg : getDailyConfig(date);
   var p = {
-    challenge_date: _dailyDateStr || cfg.dateStr,
+    challenge_date: date,
     day_of_week: cfg.dayName,
     friday_mode: cfg.specialMode ? cfg.specialMode.id : 'none'
   };
@@ -4265,6 +4272,38 @@ function commitDailyAttempt(reason) {
     how_ended: reason
   }));
   loadDailyLeaderboard(true);
+}
+
+// Attempts from earlier days that were started but never finished (tab closed,
+// never came back that day). Today's is handled by initDailyChallenge; these are
+// settled on load, oldest first: marked finished, credited to the streak on the
+// day they were played (5+ correct), and reported as abandoned. They aren't
+// offered to the leaderboard, since that day's board has closed.
+function settleStaleDailyAttempts() {
+  var today = todayStr(), stale = [];
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || k.indexOf('mathlete_daily_') !== 0) continue;
+      var date = k.slice('mathlete_daily_'.length);
+      if (date >= today) continue;
+      var r = JSON.parse(localStorage.getItem(k) || 'null');
+      if (r && r.done === false) stale.push({ key: k, date: date, r: r });
+    }
+  } catch(e) { return; }
+  stale.sort(function(a, b) { return a.date < b.date ? -1 : 1; });
+  stale.forEach(function(x) {
+    x.r.done = true;
+    try { localStorage.setItem(x.key, JSON.stringify(x.r)); } catch(e) {}
+    var s = loadStreak();
+    if (x.r.score >= 5 && (!s.lastDate || s.lastDate < x.date)) updateStreak(x.date);
+    gaEvent('daily_complete', dailyEventParams({
+      score: x.r.score,
+      streak: currentStreak(),
+      did_complete: 'false',
+      how_ended: 'abandoned'
+    }, x.date));
+  });
 }
 
 function endDailyChallenge(reason) {
@@ -4394,7 +4433,7 @@ function buildDailyShareText() {
   return 'Mathlete Daily \u00b7 ' + cfg.dayName + ' \u00b7 ' + tag + '\n' +
     '\ud83c\udfaf ' + _dailyScore + ' correct in 2 min\n' +
     (parts.length ? parts.join(' \u00b7 ') + '\n' : '') +
-    'nerdlegame.com/mathlete';
+    DAILY_LINK;
 }
 
 function shareDailyScore() {
@@ -4466,9 +4505,14 @@ window.doSkip = doSkip;
 window.startLearnLevel = startLearnLevel;
 window.retryLearnLevel = retryLearnLevel;
 // Init daily on load (deferred so all functions are defined)
-// New visitors land on Play (with the welcome banner); returning players land on Daily.
-if (isFirstVisit()) { showPage('play'); }
+settleStaleDailyAttempts();
+// A #daily link always opens the Daily Challenge. Otherwise new visitors land on
+// Play (with the welcome banner) and returning players land on Daily.
+function wantsDaily() { return /^#daily$/i.test(location.hash || ''); }
+if (wantsDaily()) { showPage('daily'); }
+else if (isFirstVisit()) { showPage('play'); }
 else if (document.getElementById('page-daily') && document.getElementById('page-daily').classList.contains('active')) { initDailyChallenge(); }
+window.addEventListener('hashchange', function() { if (wantsDaily()) showPage('daily'); });
 })();
 });
 </script>
