@@ -256,8 +256,15 @@ alter table question_log
   add column if not exists client_ts  bigint;
 -- later:
 alter table question_log add column if not exists username text;
-create index if not exists question_log_username_idx on question_log (username);
 ```
+
+**Size.** The project is on the Supabase free plan (500 MB database cap; over it the
+database goes read-only). On 2 Nov 2026 `question_log` was 262 MB of 303 MB (929k rows,
+~280 bytes each) and growing ~10–12k rows/day since the Daily started logging. To save
+space and insert IO, the `username`, `acq_source` and `(op, correct)` indexes were
+dropped that day (they were barely used); only `question_log_pkey` and
+`question_log_created_at_idx` remain. Don't recreate them for one-off analysis. Still
+to decide: trim old rows + sample games, or upgrade to Pro.
 
 > Note: `correct = false` is logged on the first *backspace* (a hesitation /
 > self-correction), not a wrong submission — the game only advances on a correct
