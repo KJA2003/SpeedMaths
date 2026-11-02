@@ -263,8 +263,19 @@ database goes read-only). On 2 Nov 2026 `question_log` was 262 MB of 303 MB (929
 ~280 bytes each) and growing ~10–12k rows/day since the Daily started logging. To save
 space and insert IO, the `username`, `acq_source` and `(op, correct)` indexes were
 dropped that day (they were barely used); only `question_log_pkey` and
-`question_log_created_at_idx` remain. Don't recreate them for one-off analysis. Still
-to decide: trim old rows + sample games, or upgrade to Pro.
+`question_log_created_at_idx` remain. Don't recreate them for one-off analysis.
+
+**Archive.** The full history is in BigQuery,
+`nerdle-ga-to-bigquery.nerdlegame.mathlete_question_log` (same columns, partitioned by
+`created_at`), copied by `nerdle-analysis-bot/supabase_archive.py`. Supabase keeps only
+recent rows: on 2 Nov 2026 everything before 1 Oct was deleted and the table vacuumed
+(70 MB; database 83 MB). The app never reads `question_log`, so trimming changes nothing
+for players. It grows ~2.8 MB/day, so untrimmed it would fill around late March 2027.
+Routine, every month or two:
+1. `python supabase_archive.py --copy` (from nerdle-analysis-bot; checks every day's
+   count against Supabase)
+2. in the SQL editor: `delete from question_log where created_at < '<1st of last month>';`
+3. then on its own: `vacuum full question_log;`
 
 > Note: `correct = false` is logged on the first *backspace* (a hesitation /
 > self-correction), not a wrong submission — the game only advances on a correct
