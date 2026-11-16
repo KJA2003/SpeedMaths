@@ -142,6 +142,9 @@ by speed and time-pressure. It powers the weakness-ranked practice.
 
 Separately, every answer is logged to Supabase (`question_log`) as a feature row
 — this is the raw training data for a future, properly-trained difficulty model.
+Answers are buffered and sent as one multi-row insert per game (at game end, when
+the next game starts, when the page is hidden, or every 40 answers): one insert per
+answer used up the free plan's Disk IO budget in Nov 2026.
 See [Data & backends](#data--backends).
 
 ---
@@ -375,7 +378,8 @@ Times are UK time (GMT). Add a line for each deploy. The live file's upload time
 
 | Deployed | What |
 |---|---|
-| 2026-10-31 21:07 | **Current.** Daily page rework, Practice/Train tabs, Daily answers logged to the skill model and `question_log`, new Daily leaderboard rules. |
+| 2026-11-16 TIME | **Current.** `question_log` answers sent as one insert per game, not one per answer (Supabase Disk IO warnings). |
+| 2026-10-31 21:07 | Daily page rework, Practice/Train tabs, Daily answers logged to the skill model and `question_log`, new Daily leaderboard rules. |
 | 2026-10-31 18:33 | Daily is the default landing page for everyone; practice-mode links. |
 | 2026-10-31 18:22 | Launch announcement (what's-new card for existing players). |
 | 2026-10-31 18:16 | Friday ×/÷ modes capped at 15 × 15. |

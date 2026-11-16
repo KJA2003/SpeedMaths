@@ -1140,6 +1140,7 @@ function keepPlaying() {
 }
 
 function quitGame() {
+  flushQuestionLog();
   document.getElementById('quit-confirm').style.display = 'none';
   if (_dailyInProgress) { endDailyChallenge('quit'); return; }
   hideSkipBtn();
@@ -1191,6 +1192,7 @@ document.getElementById('answer-input').addEventListener('input', function() {
 // END GAME
 // ================================================================
 function endGame() {
+  flushQuestionLog();
   hideSkipBtn();
   clearInterval(timerInterval); stopPaceTicker(); accepting = false;
 
@@ -1885,6 +1887,7 @@ document.getElementById('practice-input').addEventListener('input', function() {
 });
 
 function endPracticeSession() {
+  flushQuestionLog();
   document.getElementById('practice-game').style.display = 'none';
   document.getElementById('practice-done').style.display = 'block';
   document.getElementById('prac-done-score').textContent = _pracRight + '/' + _pracTotal;
@@ -3106,6 +3109,7 @@ function updateLearnStarMarkers(lv, score) {
 
 
 function endLearnLevel() {
+  flushQuestionLog();
   _learnAccepting = false;
   clearInterval(_learnTimerInterval);
 
@@ -3584,8 +3588,33 @@ function getSkillReport() {
 
 // ================================================================
 // QUESTION LOGGING (for ML training data)
-// Fire-and-forget — no impact on gameplay
+// Fire-and-forget — no impact on gameplay. Answers are buffered and sent as one
+// multi-row insert per game: one insert per answer used up the free plan's Disk IO
+// budget (Nov 2026). Flushed at game end, when a new game starts, when the page is
+// hidden or closed, and every QLOG_MAX answers.
 // ================================================================
+var QLOG_MAX = 40;
+var _qlogBuf = [];
+
+function flushQuestionLog() {
+  if (!_qlogBuf.length) return;
+  var rows = _qlogBuf;
+  _qlogBuf = [];
+  fetch(SUPA_URL + '/rest/v1/question_log', {
+    method: 'POST',
+    keepalive: true,   // lets the request finish if the page is closing
+    headers: {
+      'apikey':        SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type':  'application/json',
+      'Prefer':        'return=minimal'
+    },
+    body: JSON.stringify(rows)
+  }).catch(function() {}); // silent fail — never block gameplay
+}
+document.addEventListener('visibilitychange', function() { if (document.hidden) flushQuestionLog(); });
+window.addEventListener('pagehide', flushQuestionLog);
+
 function logQuestion(op, a, b, correct, elapsedMs, gamePos, timeLeft, dur) {
   var payload = {
     device_id:     getDeviceId(),   // persistent anonymous per-device id
@@ -3609,16 +3638,10 @@ function logQuestion(op, a, b, correct, elapsedMs, gamePos, timeLeft, dur) {
     mag_a:         magBucket(a),
     mag_b:         magBucket(b)
   };
-  fetch(SUPA_URL + '/rest/v1/question_log', {
-    method: 'POST',
-    headers: {
-      'apikey':        SUPA_KEY,
-      'Authorization': 'Bearer ' + SUPA_KEY,
-      'Content-Type':  'application/json',
-      'Prefer':        'return=minimal'
-    },
-    body: JSON.stringify(payload)
-  }).catch(function() {}); // silent fail — never block gameplay
+  // A new game's first answer sends whatever an earlier (abandoned) game left behind
+  if (_qlogBuf.length && _qlogBuf[0].session_id !== payload.session_id) flushQuestionLog();
+  _qlogBuf.push(payload);
+  if (_qlogBuf.length >= QLOG_MAX) flushQuestionLog();
 }
 
 
@@ -4418,6 +4441,7 @@ function settleStaleDailyAttempts() {
 
 function endDailyChallenge(reason) {
   if (_dailyDone) return;
+  flushQuestionLog();
   reason = reason || 'time';  // the clock running out is the normal way a game ends
   _dailyDone = true;
   _dailyInProgress = false;
