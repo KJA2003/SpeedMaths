@@ -378,7 +378,7 @@ Times are UK time (GMT). Add a line for each deploy. The live file's upload time
 
 | Deployed | What |
 |---|---|
-| 2026-11-16 TIME | **Current.** `question_log` answers sent as one insert per game, not one per answer (Supabase Disk IO warnings). |
+| 2026-11-16 21:16 | **Current.** `question_log` answers sent as one insert per game, not one per answer (Supabase Disk IO warnings). |
 | 2026-10-31 21:07 | Daily page rework, Practice/Train tabs, Daily answers logged to the skill model and `question_log`, new Daily leaderboard rules. |
 | 2026-10-31 18:33 | Daily is the default landing page for everyone; practice-mode links. |
 | 2026-10-31 18:22 | Launch announcement (what's-new card for existing players). |
